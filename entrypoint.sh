@@ -1,5 +1,5 @@
 #!/bin/bash
 set -e
 
-echo "Running src/run.sh..."
-exec ./src/run.sh
+echo "Running src/run.py..."
+exec python3 ./src/run.py "$@"

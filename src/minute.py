@@ -1,20 +1,26 @@
 #!/usr/bin/env python3
+"""
+Minute-level data collection module for KRX market data.
+Fetches intraday minute-by-minute price data for given symbols.
+"""
 
 import argparse
-import sys
-import re
 import asyncio
 import aiohttp
+import re
+import sys
 from datetime import datetime
 from bs4 import BeautifulSoup
 
-URL = 'https://finance.naver.com/item/sise_time.nhn'
-HEADERS = {
+
+MINUTE_URL = 'https://finance.naver.com/item/sise_time.nhn'
+MINUTE_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4501.0 Safari/537.36'
 }
 
-def parse_rows(symbol, bs):
-    # Performance: Avoid partition() if possible, but the structure is fixed
+
+def parse_minute_rows(symbol, bs):
+    """Parse minute data rows from HTML"""
     values = [span.text.strip().replace(',', '') for span in bs.find_all('span', class_='tah')]
     if not values:
         return []
@@ -26,10 +32,12 @@ def parse_rows(symbol, bs):
         if len(row) == 7:
             # Result format: [symbol, price, volume, time]
             result.append([symbol, row[1], row[6], row[0]])
-    # Return in original order (newest first from page)
+    
     return result
 
-async def fetch_page(session, symbol, date_str, page, semaphore):
+
+async def fetch_minute_page(session, symbol, date_str, page, semaphore):
+    """Fetch a single page of minute data"""
     async with semaphore:
         params = {
             'page': page,
@@ -37,34 +45,34 @@ async def fetch_page(session, symbol, date_str, page, semaphore):
             'thistime': date_str.replace('-', '') + '235959'
         }
         try:
-            async with session.get(URL, params=params, headers=HEADERS, timeout=10) as response:
+            async with session.get(MINUTE_URL, params=params, headers=MINUTE_HEADERS, timeout=10) as response:
                 if response.status != 200:
                     return []
                 text = await response.read()
-                # Use lxml for speed
                 bs = BeautifulSoup(text, 'lxml')
-                return parse_rows(symbol, bs)
+                return parse_minute_rows(symbol, bs)
         except Exception:
             return []
 
-async def fetch_symbol(session, symbol, date_str, semaphore):
-    # 1. Fetch page 1 and get last page number
+
+async def fetch_minute_symbol(session, symbol, date_str, semaphore):
+    """Fetch all minute data for a single symbol"""
     params = {
         'page': 1,
         'code': symbol,
         'thistime': date_str.replace('-', '') + '235959'
     }
     try:
-        async with session.get(URL, params=params, headers=HEADERS, timeout=10) as response:
+        async with session.get(MINUTE_URL, params=params, headers=MINUTE_HEADERS, timeout=10) as response:
             if response.status != 200:
-                return
+                return []
             text = await response.read()
             bs = BeautifulSoup(text, 'lxml')
             
             # Parse page 1 immediately
-            all_results = parse_rows(symbol, bs)
+            all_results = parse_minute_rows(symbol, bs)
             if not all_results:
-                return
+                return []
 
             # Determine last page
             pg_rr = bs.find('td', class_='pgRR')
@@ -74,53 +82,98 @@ async def fetch_symbol(session, symbol, date_str, semaphore):
                 match = re.search(r'page=([0-9]+)', pg_rr.a['href'])
                 last_page = int(match.group(1)) if match else 1
 
-            # 2. Fetch remaining pages (2..last_page) concurrently
+            # Fetch remaining pages concurrently
             if last_page > 1:
-                tasks = [fetch_page(session, symbol, date_str, pg, semaphore) for pg in range(2, last_page + 1)]
+                tasks = [fetch_minute_page(session, symbol, date_str, pg, semaphore) 
+                        for pg in range(2, last_page + 1)]
                 other_pages = await asyncio.gather(*tasks)
                 for page_results in other_pages:
                     all_results.extend(page_results)
 
-            # 3. Dedup and sort
-            # Use a set for dedup (based on time + symbol as unique key)
+            # Dedup and sort
             unique_data = {}
             for res in all_results:
-                # key is time (res[3])
-                key = res[3]
+                key = res[3]  # time
                 if key not in unique_data:
                     unique_data[key] = res
             
-            # Sort by time (res[3]) reverse to match original 'last page to first' intended logic? 
-            # Actually, the user's run.sh sorts by time. We'll just print them.
-            for key in sorted(unique_data.keys()):
-                print('\t'.join(unique_data[key]))
+            # Return sorted results
+            return ['\t'.join(unique_data[key]) for key in sorted(unique_data.keys())]
                     
     except Exception as e:
         print(f'[ERROR] Exception for {symbol}: {e}', file=sys.stderr)
+        return []
 
-async def main_async(date_str, symbols, concurrency):
-    # Connector with limit=0 to use semaphore for flow control
+
+async def collect_minute_data(date_str, symbols, concurrency):
+    """Collect minute data for all symbols"""
+    print(f'[INFO] Collecting minute data for {date_str}...', file=sys.stderr)
+    
     connector = aiohttp.TCPConnector(limit=0, ttl_dns_cache=300)
     semaphore = asyncio.Semaphore(concurrency)
+    results = []
     
     async with aiohttp.ClientSession(connector=connector) as session:
-        # Process symbols with some concurrency too, but controlled
-        # To avoid creating 2500+ tasks at once, we can chunk symbols
-        # OR just use a global semaphore across all requests. 
-        # The current fetch_symbol calls fetch_page which uses the same semaphore.
-        tasks = [fetch_symbol(session, symbol, date_str, semaphore) for symbol in symbols]
-        await asyncio.gather(*tasks)
+        tasks = [fetch_minute_symbol(session, symbol, date_str, semaphore) for symbol in symbols]
+        responses = await asyncio.gather(*tasks)
+        
+        for symbol_results in responses:
+            results.extend(symbol_results)
+    
+    print(f'[INFO] Minute data collected: {len(results)} lines', file=sys.stderr)
+    return results
+
+
+async def main_async(date, symbols, concurrency):
+    """Main async entry point"""
+    results = await collect_minute_data(date, symbols, concurrency)
+    
+    # Output results to stdout (sorted by time - 4th column)
+    sorted_lines = sorted(results, key=lambda x: x.split('\t')[3] if len(x.split('\t')) > 3 else '')
+    for line in sorted_lines:
+        print(line)
+    
+    return 0
+
+
+def main():
+    """CLI entry point"""
+    parser = argparse.ArgumentParser(description='Collect minute-level data for KRX stocks')
+    parser.add_argument('-d', '--date', 
+                       default=datetime.now().strftime('%Y-%m-%d'),
+                       help='Date to collect data for (format: YYYY-MM-DD)')
+    parser.add_argument('-s', '--symbols',
+                       required=True,
+                       help='Comma-separated list of symbols or path to file with symbols')
+    parser.add_argument('-c', '--concurrency',
+                       type=int,
+                       default=20,
+                       help='Max concurrent requests')
+    
+    args = parser.parse_args()
+    
+    # Parse symbols
+    if ',' in args.symbols:
+        symbols = args.symbols.split(',')
+    else:
+        # Assume it's a file path
+        try:
+            with open(args.symbols, 'r') as f:
+                symbols = [line.strip() for line in f if line.strip()]
+        except FileNotFoundError:
+            print(f'[ERROR] Symbols file not found: {args.symbols}', file=sys.stderr)
+            sys.exit(1)
+    
+    try:
+        exit_code = asyncio.run(main_async(args.date, symbols, args.concurrency))
+        sys.exit(exit_code)
+    except KeyboardInterrupt:
+        print('\n[INFO] Interrupted by user', file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f'[ERROR] Unexpected error: {e}', file=sys.stderr)
+        sys.exit(1)
+
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-d', '--date', default=datetime.now().strftime('%Y-%m-%d'), help='format: YYYY-MM-DD')
-    parser.add_argument('-c', '--concurrency', type=int, default=50, help='Max concurrent requests')
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('-f', '--file', type=argparse.FileType('r'), help='symbol file')
-    group.add_argument('-s', '--symbol')
-    args = parser.parse_args()
-
-    symbols = [args.symbol] if args.symbol else [line.strip() for line in args.file if line.strip()]
-    
-    # Use ProactorEventLoop on Windows if needed, but asyncio.run handles it in 3.8+
-    asyncio.run(main_async(args.date, symbols, args.concurrency))
+    main()
