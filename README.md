@@ -92,12 +92,16 @@ pip install -r requirements.txt
 이 프로젝트는 Docker 컨테이너와 호스트의 **systemd timer**를 연동하여 자동 수집 환경을 구축합니다.
 
 ### 1. 배포 및 시스템 자동화 설정 (Linux)
-제공된 배포 스크립트를 통해 소스 코드 복사, Docker 빌드, 서비스/타이머 등록이 한 번에 진행됩니다.
+제공된 배포 스크립트를 통해 소스 코드 복사, Docker 빌드, 서비스/타이머 등록이 한 번에 진행됩니다. 이 프로젝트는 `systemd --user` 모드를 사용하므로 루트 권한 없이(sudo 제외) 관리 가능합니다.
 ```bash
-sudo ./scripts/deploy.sh
+# 실행 전 실행 권한 부여
+chmod +x scripts/deploy.sh
+# 배포 스크립트 실행
+./scripts/deploy.sh
 ```
 *   **스케줄**: 매 평일(월-금) 17:00에 자동 실행
-*   **동작**: 컨테이너 실행 후 수집 태스크가 완료되면 즉시 종료 (`--rm`)
+*   **사용자 모드**: 서비스는 `~/.config/systemd/user/`에 등록되며, `loginctl enable-linger`가 자동으로 설정되어 로그아웃 후에도 타이머가 동작합니다.
+*   **상태 확인**: `systemctl --user status krx-price.timer`
 
 ### 2. 수동 실행
 ```bash

@@ -1,75 +1,65 @@
 #!/bin/bash
+# KRX Price Collection Deployment Script (User Mode)
 
-# Exit on error
 set -e
 
-# Run as root check
-if [ "$EUID" -ne 0 ]; then
-  echo "Please run as root (use sudo)"
-  exit 1
+# Configuration
+INSTALL_DIR="/srv/krx-price"
+SYSTEMD_USER_DIR="${HOME}/.config/systemd/user"
+SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+echo "� Setting up KRX Price Collection in USER mode..."
+echo "   Source: $SRC_DIR"
+echo "   Target: $INSTALL_DIR"
+
+# 1. Setup target directory (requires sudo for /srv, then transfer ownership)
+if [ ! -d "$INSTALL_DIR" ]; then
+    echo "📂 Creating $INSTALL_DIR with sudo..."
+    sudo mkdir -p "$INSTALL_DIR"
+    sudo chown "${USER}:${USER}" "$INSTALL_DIR"
 fi
 
-# Get the directory where this script is located
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-# Project root is one level up from scripts/
-PROJECT_DIR="$( cd "$SCRIPT_DIR/.." &> /dev/null && pwd )"
+# Create subdirectories
+mkdir -p "${INSTALL_DIR}/data"
+mkdir -p "${SYSTEMD_USER_DIR}"
 
-TARGET_DIR="/srv/krx-price"
-CURRENT_USER=$(logname || echo $USER)
+# 2. File installation
+echo "📝 Installing application files..."
+if [ "$SRC_DIR" != "$INSTALL_DIR" ]; then
+    cp -r "${SRC_DIR}"/* "$INSTALL_DIR/" 2>/dev/null || true
+fi
 
-echo "Setting up systemd for krx-price..."
-echo "Project Dir (Source): $PROJECT_DIR"
-echo "Target Dir (Operation): $TARGET_DIR"
-echo "User: $CURRENT_USER"
+# 3. Enable linger so services run without login
+echo "👤 Enabling linger for user ${USER}..."
+loginctl enable-linger "${USER}"
 
-# Create target directory and data directory
-echo "Creating directories..."
-mkdir -p "$TARGET_DIR"
-mkdir -p "$TARGET_DIR/data"
-
-# Copy necessary files to target directory
-echo "Copying files to $TARGET_DIR..."
-cp -r "$PROJECT_DIR/src" "$TARGET_DIR/"
-cp -r "$PROJECT_DIR/scripts" "$TARGET_DIR/"
-cp "$PROJECT_DIR/Dockerfile" "$TARGET_DIR/"
-cp "$PROJECT_DIR/docker-compose.yml" "$TARGET_DIR/"
-cp "$PROJECT_DIR/entrypoint.sh" "$TARGET_DIR/"
-cp "$PROJECT_DIR/requirements.txt" "$TARGET_DIR/"
-
-# Fix permissions
-chown -R "$CURRENT_USER:$CURRENT_USER" "$TARGET_DIR"
-
-# Template paths
-SERVICE_TEMPLATE="$PROJECT_DIR/scripts/systemd/krx-price.service"
-TIMER_TEMPLATE="$PROJECT_DIR/scripts/systemd/krx-price.timer"
-
-# Target paths
-SERVICE_TARGET="/etc/systemd/system/krx-price.service"
-TIMER_TARGET="/etc/systemd/system/krx-price.timer"
-
-# Create service file from template
-# Use TARGET_DIR as the WorkingDirectory
-sed -e "s|{{PROJECT_ROOT}}|$TARGET_DIR|g" \
-    -e "s|{{USER}}|$CURRENT_USER|g" \
-    "$SERVICE_TEMPLATE" > "$SERVICE_TARGET"
-
-# Copy timer file
-cp "$TIMER_TEMPLATE" "$TIMER_TARGET"
-
-# Reload systemd
-echo "Reloading systemd daemon..."
-systemctl daemon-reload
-
-# Build the docker image at the target location
-echo "Building Docker image at $TARGET_DIR..."
-cd "$TARGET_DIR"
+# 4. Docker build
+echo "🐳 Building Docker image at target location..."
+cd "$INSTALL_DIR"
 docker compose build
 
-# Enable and start the timer
-echo "Enabling and starting krx-price.timer..."
-systemctl enable krx-price.timer
-systemctl start krx-price.timer
+# 5. Systemd unit setup (with template processing)
+echo "📝 Setting up systemd units..."
+SERVICE_TEMPLATE="${INSTALL_DIR}/scripts/systemd/krx-price.service"
+TIMER_TEMPLATE="${INSTALL_DIR}/scripts/systemd/krx-price.timer"
+SERVICE_TARGET="${SYSTEMD_USER_DIR}/krx-price.service"
+TIMER_TARGET="${SYSTEMD_USER_DIR}/krx-price.timer"
 
-echo "Systemd setup complete!"
-echo "The application is now operating from $TARGET_DIR"
-systemctl status krx-price.timer --no-pager
+# Replace variables in service template
+sed "s|{{PROJECT_ROOT}}|$INSTALL_DIR|g" "$SERVICE_TEMPLATE" > "$SERVICE_TARGET"
+cp "$TIMER_TEMPLATE" "$TIMER_TARGET"
+
+# 6. Start the timer
+echo "🔄 Reloading systemd user daemon..."
+systemctl --user daemon-reload
+systemctl --user enable krx-price.timer
+systemctl --user start krx-price.timer
+
+echo ""
+echo "✅ Setup complete for user ${USER} at ${INSTALL_DIR}!"
+echo ""
+echo "📊 Monitoring (User Mode):"
+echo "   Timer status:  systemctl --user status krx-price.timer"
+echo "   View logs:     journalctl --user -u krx-price.service -f"
+echo "   Trigger now:   systemctl --user start krx-price.service"
+echo ""
