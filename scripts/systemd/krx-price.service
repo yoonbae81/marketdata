@@ -1,0 +1,13 @@
+[Unit]
+Description=krx-price Data Collection Service
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory={{PROJECT_ROOT}}
+ExecStart=/usr/bin/docker compose run --rm app
+User={{USER}}
+
+[Install]
+WantedBy=multi-user.target

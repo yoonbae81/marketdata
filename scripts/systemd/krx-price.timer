@@ -1,0 +1,9 @@
+[Unit]
+Description=Run krx-price Data Collection periodically
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 17:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

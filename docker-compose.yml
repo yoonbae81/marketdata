@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: krx-price-app
+    environment:
+      - TZ=Asia/Seoul
+    volumes:
+      - /srv/krx-price:/data
+
+# No volumes section needed if using direct host bind in services
