@@ -80,35 +80,51 @@ async def fetch_day_symbol(session, symbol, date, semaphore):
             return None
 
 
-async def collect_day_data(date, symbols, concurrency, output_file=None):
-    """Collect daily data for all symbols and optionally save to file"""
-    print(f'[INFO] Collecting day data for {date}...', file=sys.stderr)
+async def day_worker(queue, session, date, semaphore, results_file, lock):
+    """Worker to process symbols and append to file immediately"""
+    while True:
+        symbol = await queue.get()
+        try:
+            res = await fetch_day_symbol(session, symbol, date, semaphore)
+            if res and results_file:
+                async with lock:
+                    with open(results_file, 'a', encoding='utf-8') as f:
+                        f.write(res + '\n')
+        except Exception as e:
+            print(f"[ERROR] Day worker error for {symbol}: {e}", file=sys.stderr)
+        finally:
+            queue.task_done()
+
+
+async def collect_day_data(date, symbols, concurrency, output_file):
+    """Memory-safe collection of daily data"""
+    print(f'[INFO] Collecting day data for {date} (output: {output_file})...', file=sys.stderr)
     
+    # Init file
+    from pathlib import Path
+    out_path = Path(output_file)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, 'w', encoding='utf-8') as f:
+        pass
+
+    queue = asyncio.Queue()
+    for s in symbols:
+        queue.put_nowait(s)
+
     connector = aiohttp.TCPConnector(limit=0, ttl_dns_cache=300)
     semaphore = asyncio.Semaphore(concurrency)
-    results = []
+    lock = asyncio.Lock()
     
     async with aiohttp.ClientSession(connector=connector) as session:
-        tasks = [fetch_day_symbol(session, symbol, date, semaphore) for symbol in symbols]
-        responses = await asyncio.gather(*tasks)
+        workers = [asyncio.create_task(day_worker(queue, session, date, semaphore, output_file, lock))
+                   for _ in range(concurrency)]
         
-        for res in responses:
-            if res:
-                results.append(res)
-    
-    print(f'[INFO] Day data collected: {len(results)} lines', file=sys.stderr)
-    
-    # Save to file if output_file is provided
-    if output_file:
-        from pathlib import Path
-        output_path = Path(output_file)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(output_path, 'w') as f:
-            for line in sorted(results):
-                f.write(line + '\n')
-        print(f'[INFO] Day data saved to {output_path}', file=sys.stderr)
-    
-    return results
+        await queue.join()
+        for w in workers:
+            w.cancel()
+            
+    print(f'[INFO] Day data collection finished for {date}', file=sys.stderr)
+    return None
 
 
 async def main_async(date, symbols, concurrency):

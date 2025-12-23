@@ -44,7 +44,7 @@ krx-price/
 │   └── README.md          # 상세 테스트 가이드
 ├── scripts/                # 🛠️ 유틸리티 스크립트
 │   ├── setup-dev.sh/bat   # 개발 환경 자동 설정
-│   └── setup-systemd.sh   # Linux systemd 스케줄러 설정
+│   └── deploy.sh          # Linux 배포 및 systemd 스케줄러 설정
 ├── requirements.txt        # 📝 의존성 패키지 목록
 ├── Dockerfile             # 🐳 Docker 이미지 빌드 설정
 └── docker-compose.yml     # 🚢 컨테이너 실행 및 볼륨 설정
@@ -91,10 +91,10 @@ pip install -r requirements.txt
 
 이 프로젝트는 Docker 컨테이너와 호스트의 **systemd timer**를 연동하여 자동 수집 환경을 구축합니다.
 
-### 1. 시스템 자동화 설정 (Linux)
-제공된 설정 스크립트로 서비스와 타이머를 등록할 수 있습니다.
+### 1. 배포 및 시스템 자동화 설정 (Linux)
+제공된 배포 스크립트를 통해 소스 코드 복사, Docker 빌드, 서비스/타이머 등록이 한 번에 진행됩니다.
 ```bash
-sudo ./scripts/setup-systemd.sh
+sudo ./scripts/deploy.sh
 ```
 *   **스케줄**: 매 평일(월-금) 17:00에 자동 실행
 *   **동작**: 컨테이너 실행 후 수집 태스크가 완료되면 즉시 종료 (`--rm`)

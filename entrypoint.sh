@@ -35,65 +35,59 @@ async def main_async(date, output_dir, concurrency):
         fetch_symbols('KOSDAQ')
     )
     
-    total_symbols = len(kospi_symbols or []) + len(kosdaq_symbols or [])
-    print(f'[INFO] Total symbols discovered: {total_symbols} (KOSPI: {len(kospi_symbols or [])}, KOSDAQ: {len(kosdaq_symbols or [])})', file=sys.stderr)
-    
-    if total_symbols == 0:
-        print('[ERROR] No symbols found for either market, exiting', file=sys.stderr)
-        return 1
-    
-    # Step 2: Prepare tasks
-    # We maintain an explicit mapping to avoid index confusion
-    task_map = {}
-    if kospi_symbols:
-        task_map['KOSPI_DAY'] = collect_day_data(date, kospi_symbols, concurrency)
-        task_map['KOSPI_MINUTE'] = collect_minute_data(date, kospi_symbols, concurrency)
-    
-    if kosdaq_symbols:
-        task_map['KOSDAQ_DAY'] = collect_day_data(date, kosdaq_symbols, concurrency)
-        task_map['KOSDAQ_MINUTE'] = collect_minute_data(date, kosdaq_symbols, concurrency)
-    
-    # Step 3: Execute tasks
-    keys = list(task_map.keys())
-    print(f'[INFO] Dispatching {len(keys)} collection tasks...', file=sys.stderr)
-    results_list = await asyncio.gather(*[task_map[k] for k in keys])
-    
-    # Map results back to their types
-    named_results = dict(zip(keys, results_list))
-    
-    # Step 4: Combine results
-    day_results = []
-    minute_results = []
-    
-    for key, data in named_results.items():
-        count = len(data)
-        print(f'[INFO] Task {key} finished: collected {count} records', file=sys.stderr)
-        if 'DAY' in key:
-            day_results.extend(data)
-        else:
-            minute_results.extend(data)
-    
-    print(f'[INFO] Final counts - Day: {len(day_results)}, Minute: {len(minute_results)}', file=sys.stderr)
-    
-    # Step 5: Save results
+    # Step 2 & 3: Prepare and execute tasks
+    # We now pass output files directly to the collectors
     day_file = output_path / 'day' / f'{date}.txt'
     minute_file = output_path / 'minute' / f'{date}.txt'
     
-    # Save day data
-    day_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(day_file, 'w') as f:
-        for line in sorted(day_results):
-            f.write(line + '\n')
-    print(f'[INFO] Day data saved to {day_file}', file=sys.stderr)
+    # Use temporary files for each market to allow parallel writing without lock contention
+    # and then merge them.
+    temp_files = {
+        'KOSPI_DAY': output_path / f'kospi_day_{date}.tmp',
+        'KOSPI_MINUTE': output_path / f'kospi_minute_{date}.tmp',
+        'KOSDAQ_DAY': output_path / f'kosdaq_day_{date}.tmp',
+        'KOSDAQ_MINUTE': output_path / f'kosdaq_minute_{date}.tmp'
+    }
+
+    task_defs = []
+    if kospi_symbols:
+        task_defs.append(('KOSPI_DAY', collect_day_data(date, kospi_symbols, concurrency, str(temp_files['KOSPI_DAY']))))
+        task_defs.append(('KOSPI_MINUTE', collect_minute_data(date, kospi_symbols, concurrency, str(temp_files['KOSPI_MINUTE']))))
     
-    # Save minute data
+    if kosdaq_symbols:
+        task_defs.append(('KOSDAQ_DAY', collect_day_data(date, kosdaq_symbols, concurrency, str(temp_files['KOSDAQ_DAY']))))
+        task_defs.append(('KOSDAQ_MINUTE', collect_minute_data(date, kosdaq_symbols, concurrency, str(temp_files['KOSDAQ_MINUTE']))))
+    
+    print(f'[INFO] Dispatching {len(task_defs)} collection tasks...', file=sys.stderr)
+    await asyncio.gather(*[t[1] for t in task_defs])
+    
+    # Step 4: Merge files
+    print('[INFO] Merging results...', file=sys.stderr)
+    
+    # Combine Day files
+    day_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(day_file, 'w', encoding='utf-8') as outfile:
+        for key in ['KOSPI_DAY', 'KOSDAQ_DAY']:
+            tmp = temp_files[key]
+            if tmp.exists():
+                with open(tmp, 'r', encoding='utf-8') as infile:
+                    for line in infile:
+                        outfile.write(line)
+                tmp.unlink()
+
+    # Combine Minute files
     minute_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(minute_file, 'w') as f:
-        # Sort by time (4th column)
-        sorted_lines = sorted(minute_results, key=lambda x: x.split('\t')[3] if len(x.split('\t')) > 3 else '')
-        for line in sorted_lines:
-            f.write(line + '\n')
-    print(f'[INFO] Minute data saved to {minute_file}', file=sys.stderr)
+    with open(minute_file, 'w', encoding='utf-8') as outfile:
+        for key in ['KOSPI_MINUTE', 'KOSDAQ_MINUTE']:
+            tmp = temp_files[key]
+            if tmp.exists():
+                with open(tmp, 'r', encoding='utf-8') as infile:
+                    for line in infile:
+                        outfile.write(line)
+                tmp.unlink()
+    
+    print(f'[INFO] Data saved to {day_file} and {minute_file}', file=sys.stderr)
+    return 0
     
     return 0
 

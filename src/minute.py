@@ -138,36 +138,55 @@ async def fetch_minute_symbol(session, symbol, date_str, semaphore):
         return ['\t'.join(r) for r in all_results]
 
 
-async def collect_minute_data(date_str, symbols, concurrency, output_file=None):
-    """Collect minute data for all symbols and optionally save to file"""
-    print(f'[INFO] Collecting minute data for {date_str}...', file=sys.stderr)
+async def minute_worker(queue, session, date_str, semaphore, results_file, lock):
+    """Worker to process symbols from a queue and write to file immediately"""
+    while True:
+        symbol = await queue.get()
+        try:
+            # Fetch all minute data for the symbol
+            symbol_results = await fetch_minute_symbol(session, symbol, date_str, semaphore)
+            if symbol_results and results_file:
+                async with lock:
+                    with open(results_file, 'a', encoding='utf-8') as f:
+                        for line in symbol_results:
+                            f.write(line + '\n')
+        except Exception as e:
+            print(f"[ERROR] Worker error for {symbol}: {e}", file=sys.stderr)
+        finally:
+            queue.task_done()
+
+
+async def collect_minute_data(date_str, symbols, concurrency, output_file):
+    """Memory-safe collection of minute data using worker-queue pattern"""
+    print(f'[INFO] Collecting minute data for {date_str} (output: {output_file})...', file=sys.stderr)
     
+    # Ensure output directory exists and file is empty
+    from pathlib import Path
+    out_path = Path(output_file)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, 'w', encoding='utf-8') as f:
+        pass
+
+    queue = asyncio.Queue()
+    for s in symbols:
+        queue.put_nowait(s)
+
     connector = aiohttp.TCPConnector(limit=0, ttl_dns_cache=300)
     semaphore = asyncio.Semaphore(concurrency)
-    results = []
+    lock = asyncio.Lock()
     
     async with aiohttp.ClientSession(connector=connector) as session:
-        tasks = [fetch_minute_symbol(session, symbol, date_str, semaphore) for symbol in symbols]
-        responses = await asyncio.gather(*tasks)
+        # Use a fixed number of workers (equal to concurrency is usually good)
+        workers = [asyncio.create_task(minute_worker(queue, session, date_str, semaphore, output_file, lock))
+                   for _ in range(concurrency)]
         
-        for symbol_results in responses:
-            results.extend(symbol_results)
+        await queue.join()
+        
+        for w in workers:
+            w.cancel()
     
-    print(f'[INFO] Minute data collected: {len(results)} lines', file=sys.stderr)
-    
-    # Save to file if output_file is provided
-    if output_file:
-        from pathlib import Path
-        output_path = Path(output_file)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(output_path, 'w') as f:
-            # Sort by 4th column (time)
-            sorted_lines = sorted(results, key=lambda x: x.split('\t')[3] if len(x.split('\t')) > 3 else '')
-            for line in sorted_lines:
-                f.write(line + '\n')
-        print(f'[INFO] Minute data saved to {output_path}', file=sys.stderr)
-    
-    return results
+    print(f'[INFO] Minute data collection finished for {date_str}', file=sys.stderr)
+    return None  # No longer returning a massive list
 
 
 async def main_async(date, symbols, concurrency):
