@@ -6,8 +6,8 @@ Requires=docker.service
 [Service]
 Type=oneshot
 WorkingDirectory={{PROJECT_ROOT}}
-Environment="UID={{UID}}"
-Environment="GID={{GID}}"
+Environment="APP_UID={{APP_UID}}"
+Environment="APP_GID={{APP_GID}}"
 ExecStart=/usr/bin/docker compose run --rm app
 
 [Install]

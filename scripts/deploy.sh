@@ -34,6 +34,8 @@ loginctl enable-linger "${USER}" 2>/dev/null || true
 # 4. Docker build
 echo "🐳 Building Docker image..."
 cd "$SRC_DIR"
+export APP_UID=$(id -u)
+export APP_GID=$(id -g)
 docker compose build
 
 # 5. Systemd unit setup (pointing to source directory)
@@ -45,8 +47,8 @@ TIMER_TARGET="${SYSTEMD_USER_DIR}/krx-price.timer"
 
 # Replace variables in service template - using SRC_DIR instead of INSTALL_DIR
 sed -e "s|{{PROJECT_ROOT}}|$SRC_DIR|g" \
-    -e "s|{{UID}}|$(id -u)|g" \
-    -e "s|{{GID}}|$(id -g)|g" \
+    -e "s|{{APP_UID}}|$APP_UID|g" \
+    -e "s|{{APP_GID}}|$APP_GID|g" \
     "$SERVICE_TEMPLATE" > "$SERVICE_TARGET"
 cp "$TIMER_TEMPLATE" "$TIMER_TARGET"
 
