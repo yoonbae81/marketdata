@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.14-slim
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -18,6 +18,7 @@ COPY . .
 
 # Make scripts executable
 RUN find src scripts -type f \( -name "*.py" -o -name "*.sh" \) -exec chmod +x {} + 2>/dev/null || true
+RUN chmod +x entrypoint.sh
 
 # Create log directory and data directory
 RUN mkdir -p /var/log/app /data
@@ -25,8 +26,4 @@ RUN mkdir -p /var/log/app /data
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 
-# Entrypoint script
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["python3", "entrypoint.sh"]

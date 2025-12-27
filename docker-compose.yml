@@ -4,5 +4,7 @@ services:
     container_name: krx-price-app
     environment:
       - TZ=Asia/Seoul
+    user: "${UID}:${GID}"
     volumes:
       - /srv/krx-price:/data
+    restart: no

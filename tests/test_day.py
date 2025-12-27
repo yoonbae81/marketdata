@@ -30,15 +30,17 @@ class TestParseDayData(unittest.TestCase):
     def test_parse_day_data_success(self):
         """Test successful parsing of daily data"""
         html = """
-        <html>
-            <span class="tah">2023-12-20</span>
-            <span class="tah">70,000</span>
-            <span class="tah">+1,000</span>
-            <span class="tah">69,000</span>
-            <span class="tah">71,000</span>
-            <span class="tah">68,500</span>
-            <span class="tah">1,000,000</span>
-        </html>
+        <table class="type2">
+            <tr>
+                <td><span class="tah">2023.12.20</span></td>
+                <td>70,000</td>
+                <td>+1,000</td>
+                <td>69,000</td>
+                <td>71,000</td>
+                <td>68,500</td>
+                <td>1,000,000</td>
+            </tr>
+        </table>
         """
         bs = BeautifulSoup(html, 'lxml')
         
@@ -55,22 +57,26 @@ class TestParseDayData(unittest.TestCase):
     def test_parse_day_data_multiple_rows(self):
         """Test parsing multiple rows of data"""
         html = """
-        <html>
-            <span class="tah">2023-12-20</span>
-            <span class="tah">70,000</span>
-            <span class="tah">+1,000</span>
-            <span class="tah">69,000</span>
-            <span class="tah">71,000</span>
-            <span class="tah">68,500</span>
-            <span class="tah">1,000,000</span>
-            <span class="tah">2023-12-19</span>
-            <span class="tah">69,000</span>
-            <span class="tah">-500</span>
-            <span class="tah">68,500</span>
-            <span class="tah">69,500</span>
-            <span class="tah">68,000</span>
-            <span class="tah">900,000</span>
-        </html>
+        <table class="type2">
+            <tr>
+                <td><span class="tah">2023.12.20</span></td>
+                <td>70,000</td>
+                <td>+1,000</td>
+                <td>69,000</td>
+                <td>71,000</td>
+                <td>68,500</td>
+                <td>1,000,000</td>
+            </tr>
+            <tr>
+                <td><span class="tah">2023.12.19</span></td>
+                <td>69,000</td>
+                <td>-500</td>
+                <td>68,500</td>
+                <td>69,500</td>
+                <td>68,000</td>
+                <td>900,000</td>
+            </tr>
+        </table>
         """
         bs = BeautifulSoup(html, 'lxml')
         
@@ -92,11 +98,12 @@ class TestParseDayData(unittest.TestCase):
     def test_parse_day_data_incomplete_row(self):
         """Test parsing with incomplete row (less than 7 fields)"""
         html = """
-        <html>
-            <span class="tah">2023-12-20</span>
-            <span class="tah">70,000</span>
-            <span class="tah">+1,000</span>
-        </html>
+        <table class="type2">
+            <tr>
+                <td><span class="tah">2023.12.20</span></td>
+                <td>70,000</td>
+            </tr>
+        </table>
         """
         bs = BeautifulSoup(html, 'lxml')
         
@@ -111,15 +118,17 @@ class TestFetchDaySymbol(unittest.IsolatedAsyncioTestCase):
     async def test_fetch_day_symbol_success(self):
         """Test successful fetch of daily data for a symbol"""
         html = """
-        <html>
-            <span class="tah">2023-12-20</span>
-            <span class="tah">70,000</span>
-            <span class="tah">+1,000</span>
-            <span class="tah">69,000</span>
-            <span class="tah">71,000</span>
-            <span class="tah">68,500</span>
-            <span class="tah">1,000,000</span>
-        </html>
+        <table class="type2">
+            <tr>
+                <td><span class="tah">2023.12.20</span></td>
+                <td>70,000</td>
+                <td>+1,000</td>
+                <td>69,000</td>
+                <td>71,000</td>
+                <td>68,500</td>
+                <td>1,000,000</td>
+            </tr>
+        </table>
         """
         
         mock_response = AsyncMock()
@@ -146,15 +155,17 @@ class TestFetchDaySymbol(unittest.IsolatedAsyncioTestCase):
     async def test_fetch_day_symbol_date_not_found(self):
         """Test when requested date is not in the data"""
         html = """
-        <html>
-            <span class="tah">2023-12-19</span>
-            <span class="tah">70,000</span>
-            <span class="tah">+1,000</span>
-            <span class="tah">69,000</span>
-            <span class="tah">71,000</span>
-            <span class="tah">68,500</span>
-            <span class="tah">1,000,000</span>
-        </html>
+        <table class="type2">
+            <tr>
+                <td><span class="tah">2023.12.19</span></td>
+                <td>70,000</td>
+                <td>+1,000</td>
+                <td>69,000</td>
+                <td>71,000</td>
+                <td>68,500</td>
+                <td>1,000,000</td>
+            </tr>
+        </table>
         """
         
         mock_response = AsyncMock()
@@ -175,15 +186,17 @@ class TestFetchDaySymbol(unittest.IsolatedAsyncioTestCase):
     async def test_fetch_day_symbol_open_is_zero(self):
         """Test when open price is 0 (should be filtered out)"""
         html = """
-        <html>
-            <span class="tah">2023-12-20</span>
-            <span class="tah">70,000</span>
-            <span class="tah">+1,000</span>
-            <span class="tah">0</span>
-            <span class="tah">71,000</span>
-            <span class="tah">68,500</span>
-            <span class="tah">1,000,000</span>
-        </html>
+        <table class="type2">
+            <tr>
+                <td><span class="tah">2023.12.20</span></td>
+                <td>70,000</td>
+                <td>+1,000</td>
+                <td>0</td>
+                <td>71,000</td>
+                <td>68,500</td>
+                <td>1,000,000</td>
+            </tr>
+        </table>
         """
         
         mock_response = AsyncMock()
@@ -254,14 +267,11 @@ class TestCollectDayData(unittest.IsolatedAsyncioTestCase):
             ]
             
             m = mock_open()
-            with patch('builtins.open', m):
-                with patch('pathlib.Path.mkdir'):
-                    symbols = ['005930', '000660']
-                    result = await collect_day_data('2023-12-20', symbols, 20, 
-                                                    output_file='/tmp/day.tsv')
+            with patch('pathlib.Path.mkdir'):
+                symbols = ['005930', '000660']
+                result = await collect_day_data('2023-12-20', symbols, 20)
             
             self.assertEqual(len(result), 2)
-            m.assert_called_once()
     
     async def test_collect_day_data_empty_results(self):
         """Test when all symbols return None"""
