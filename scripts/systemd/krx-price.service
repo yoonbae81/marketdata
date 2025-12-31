@@ -1,7 +1,6 @@
 [Unit]
 Description=krx-price Data Collection Service
-After=docker.service
-Requires=docker.service
+After=network.target
 
 [Service]
 Type=oneshot
