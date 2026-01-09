@@ -36,8 +36,8 @@ class TestParseMinuteRows(unittest.TestCase):
                 <td><span class="tah">09:00</span></td>
                 <td><span class="tah">70,000</span></td>
                 <td></td><td></td><td></td>
+                <td><span class="tah">99,000</span></td>
                 <td><span class="tah">1,000</span></td>
-                <td></td>
             </tr>
         </table>
         """
@@ -59,15 +59,15 @@ class TestParseMinuteRows(unittest.TestCase):
                 <td><span class="tah">09:00</span></td>
                 <td><span class="tah">70,000</span></td>
                 <td></td><td></td><td></td>
+                <td><span class="tah">99,000</span></td>
                 <td><span class="tah">1,000</span></td>
-                <td></td>
             </tr>
             <tr>
                 <td><span class="tah">09:01</span></td>
                 <td><span class="tah">70,500</span></td>
                 <td></td><td></td><td></td>
+                <td><span class="tah">99,800</span></td>
                 <td><span class="tah">800</span></td>
-                <td></td>
             </tr>
         </table>
         """
@@ -116,8 +116,8 @@ class TestFetchMinutePage(unittest.IsolatedAsyncioTestCase):
                 <td><span class="tah">09:00</span></td>
                 <td><span class="tah">70,000</span></td>
                 <td></td><td></td><td></td>
+                <td><span class="tah">99,000</span></td>
                 <td><span class="tah">1,000</span></td>
-                <td></td>
             </tr>
         </table>
         """
@@ -175,8 +175,8 @@ class TestFetchMinuteSymbol(unittest.IsolatedAsyncioTestCase):
                 <td><span class="tah">09:00</span></td>
                 <td><span class="tah">70,000</span></td>
                 <td></td><td></td><td></td>
+                <td><span class="tah">99,000</span></td>
                 <td><span class="tah">1,000</span></td>
-                <td></td>
             </tr>
         </table>
         """
@@ -255,15 +255,15 @@ class TestFetchMinuteSymbol(unittest.IsolatedAsyncioTestCase):
                 <td><span class="tah">09:00</span></td>
                 <td><span class="tah">70,000</span></td>
                 <td></td><td></td><td></td>
+                <td><span class="tah">99,000</span></td>
                 <td><span class="tah">1,000</span></td>
-                <td></td>
             </tr>
             <tr>
                 <td><span class="tah">09:00</span></td>
                 <td><span class="tah">70,100</span></td>
                 <td></td><td></td><td></td>
+                <td><span class="tah">100,100</span></td>
                 <td><span class="tah">1,100</span></td>
-                <td></td>
             </tr>
         </table>
         """
