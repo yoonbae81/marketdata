@@ -48,7 +48,7 @@ def parse_minute_rows(symbol, bs):
         clean_time = time_match.group(1)
             
         price = tds[1].text.strip().replace(',', '')
-        volume = tds[5].text.strip().replace(',', '')
+        volume = tds[6].text.strip().replace(',', '')
         
         # Result format: [symbol, price, volume, time]
         result.append([symbol, price, volume, clean_time])
