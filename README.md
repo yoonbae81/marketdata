@@ -24,7 +24,13 @@ MarketData는 한국 주식 시장(KRX) 및 미국 주식 시장(US) 데이터�
 *   일별 Parquet 파일에서 고속 쿼리
 *   백테스팅 라이브러리와 직접 연동 가능
 
-### 3. 주요 장점
+### 3. 데이터 병합 (Merge)
+*   **월별 병합**: 일별 파일을 월별 파일로 자동 병합 (5일 경과 후)
+*   **연별 병합**: 월별 파일을 연별 파일로 자동 병합 (과거 연도)
+*   **자동 검증**: 병합 후 데이터 무결성 자동 검증
+*   **공간 절약**: 병합 완료 후 원본 파일 자동 삭제
+
+### 4. 주요 장점
 *   **압축률**: 80-85% (텍스트 대비)
 *   **단순성**: 별도 ingest 과정 불필요
 *   **성능**: 컬럼 기반 고속 쿼리
@@ -37,9 +43,9 @@ MarketData는 한국 주식 시장(KRX) 및 미국 주식 시장(US) 데이터�
 ```text
 marketdata/
 ├── data/                   # 💾 Parquet 데이터 저장소
-│   ├── KR-1m/YYYY/         # 한국 1분 데이터 (일별 Parquet)
-│   ├── KR-1d/YYYY/         # 한국 일별 데이터 (일별 Parquet)
-│   └── US-5m/YYYY/         # 미국 5분 데이터 (일별 Parquet)
+│   ├── KR-1m/YYYY/         # 한국 1분 데이터 (일별 → 월별 → 연별)
+│   ├── KR-1d/YYYY/         # 한국 일별 데이터 (일별 → 월별 → 연별)
+│   └── US-5m/YYYY/         # 미국 5분 데이터 (일별 → 월별 → 연별)
 ├── src/                    # 📦 핵심 로직
 │   ├── fetch_kr1m.py       # 한국 1분 데이터 수집
 │   ├── fetch_kr1d.py       # 한국 일별 데이터 수집
@@ -50,6 +56,14 @@ marketdata/
 │   ├── fetch.sh            # 데이터 수집 오케스트레이터
 │   ├── setup-dev.sh/bat    # 개발 환경 설정
 │   ├── install-systemd-timer.sh  # 프로덕션 배포
+│   ├── merge-monthly/      # 월별 병합 스크립트
+│   │   ├── merge_kr1d.py   # 일별 → 월별 병합 (KR Day)
+│   │   ├── merge_kr1m.py   # 일별 → 월별 병합 (KR 1m)
+│   │   └── merge_us5m.py   # 일별 → 월별 병합 (US 5m)
+│   ├── merge-yearly/       # 연별 병합 스크립트
+│   │   ├── merge_kr1d.py   # 월별 → 연별 병합 (KR Day)
+│   │   ├── merge_kr1m.py   # 월별 → 연별 병합 (KR 1m)
+│   │   └── merge_us5m.py   # 월별 → 연별 병합 (US 5m)
 │   ├── converter/          # 텍스트→Parquet 변환 도구
 │   └── systemd/            # Systemd 서비스 파일
 └── tests/                  # 🧪 테스트 스위트
@@ -79,9 +93,62 @@ scripts\setup-dev.bat
 
 ---
 
+## 📊 데이터 수집 및 관리
+
+### 1. 데이터 수집
+```bash
+# 가상환경 활성화
+source .venv/bin/activate
+
+# 특정 날짜 데이터 수집
+bash scripts/fetch.sh -d 2026-01-17
+
+# 오늘 데이터 수집 (기본값)
+bash scripts/fetch.sh
+```
+
+### 2. 데이터 병합
+
+#### 월별 병합 (일별 → 월별)
+5일이 경과한 일별 파일을 자동으로 월별 파일로 병합합니다.
+
+```bash
+# KR Day 데이터 월별 병합
+python scripts/merge-monthly/merge_kr1d.py
+
+# KR 1m 데이터 월별 병합
+python scripts/merge-monthly/merge_kr1m.py
+
+# US 5m 데이터 월별 병합
+python scripts/merge-monthly/merge_us5m.py
+```
+
+#### 연별 병합 (월별 → 연별)
+과거 연도의 월별 파일을 자동으로 연별 파일로 병합합니다.
+
+```bash
+# KR Day 데이터 연별 병합
+python scripts/merge-yearly/merge_kr1d.py
+
+# KR 1m 데이터 연별 병합
+python scripts/merge-yearly/merge_kr1m.py
+
+# US 5m 데이터 연별 병합
+python scripts/merge-yearly/merge_us5m.py
+```
+
+**병합 프로세스:**
+1. 조건에 맞는 파일 자동 탐색
+2. 데이터 병합 및 중복 제거
+3. 병합 데이터 검증 (원본과 비교)
+4. 검증 성공 시 원본 파일 삭제
+5. 디스크 공간 절약 및 쿼리 성능 향상
+
+---
+
 ## 🧪 테스트 실행
 
-본 프로젝트는 총 **55개의 테스트 케이스**를 포함하고 있습니다.
+본 프로젝트는 총 **64개의 테스트 케이스**를 포함하고 있습니다.
 
 *   **전체 테스트 실행**: `python -m unittest discover tests -v`
 *   **단위 테스트 (Mock)**: `python -m unittest tests.test_symbol tests.test_day tests.test_minute -v`
@@ -89,29 +156,53 @@ scripts\setup-dev.bat
 
 ---
 
-## 🐳 Docker & 배포
+## 🚀 프로덕션 배포 (Linux)
 
-이 프로젝트는 Docker 컨테이너와 호스트의 **systemd timer**를 연동하여 자동 수집 환경을 구축합니다.
+### Systemd Timer를 이용한 자동 수집
 
-### 1. 배포 및 시스템 자동화 설정 (Linux)
-제공된 배포 스크립트를 통해 소스 코드 복사, Docker 빌드, 서비스/타이머 등록이 한 번에 진행됩니다.
 ```bash
-sudo ./scripts/deploy.sh
+# 배포 스크립트 실행 (서비스 및 타이머 설치)
+sudo ./scripts/install-systemd-timer.sh
 ```
-*   **스케줄**: 매 평일(월-금) 17:00에 자동 실행
-*   **동작**: 컨테이너 실행 후 수집 태스크가 완료되면 즉시 종료 (`--rm`)
 
-### 2. 수동 실행
+*   **스케줄**: 매 평일(월-금) 17:00에 자동 실행
+*   **동작**: 데이터 수집 후 자동 종료
+*   **로그**: `journalctl -u krx-price.service -f`로 확인
+
+### 수동 실행
 ```bash
-docker compose run --rm app
+# 서비스 즉시 실행
+sudo systemctl start krx-price.service
+
+# 서비스 상태 확인
+sudo systemctl status krx-price.service
 ```
 
 ---
 
-## 💾 데이터 관리
+## 💾 데이터 저장 구조
 
-*   **저장 경로**: 호스트의 `/srv/krx-price` 경로에 데이터가 저장됩니다.
+*   **저장 경로**: `data/` 디렉토리
 *   **디렉토리 구조**:
-    *   `/srv/krx-price/day`: 일별 데이터
-    *   `/srv/krx-price/minute`: 분 단위 데이터
-*   **볼륨 설정**: `docker-compose.yml`을 통해 호스트 경로와 컨테이너 내부 경로가 동기화됩니다.
+    ```
+    data/
+    ├── KR-1d/
+    │   ├── 2025.parquet           # 연별 파일 (과거 연도, KR-1d 루트에 생성)
+    │   └── 2026/
+    │       ├── 2026-01-17.parquet # 일별 파일
+    │       └── 2026-01.parquet    # 월별 파일 (5일 경과 후)
+    ├── KR-1m/
+    │   └── 2026/
+    │       ├── 2026-01-17.parquet # 일별 파일
+    │       └── 2026-01.parquet    # 월별 파일 (5일 경과 후)
+    └── US-5m/
+        └── 2026/
+            ├── 2026-01-17.parquet # 일별 파일
+            └── 2026-01.parquet    # 월별 파일 (5일 경과 후)
+    ```
+
+*   **파일 수명 주기**:
+    1. **일별 파일**: 수집 직후 생성 (`YYYY/YYYY-MM-DD.parquet`)
+    2. **월별 파일**: 5일 경과 후 일별 파일 병합 → 원본 삭제 (`YYYY/YYYY-MM.parquet`)
+    3. **연별 파일**: 과거 연도의 월별 파일 병합 → 원본 삭제 (`YYYY.parquet`, KR-1d만 해당)
+
