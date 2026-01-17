@@ -51,18 +51,32 @@ def validate_us5m_yearly():
 
         sort_cols = ['symbol', 'dt']
 
-        # Read and deduplicate TXT data
-        txt_dfs = [utils.read_txt_file(f, MARKET_TYPE) for f in all_txts]
-        txt_dfs = [df for df in txt_dfs if df is not None]
+        # Read and deduplicate TXT data incrementally
+        txt_dfs = []
+        for f in all_txts:
+            df = utils.read_txt_file(f, MARKET_TYPE)
+            if df is not None:
+                txt_dfs.append(df)
+        
         if not txt_dfs:
             continue
             
-        combined_txt = pd.concat(txt_dfs, ignore_index=True).drop_duplicates().sort_values(sort_cols).reset_index(drop=True)
+        combined_txt = pd.concat(txt_dfs, ignore_index=True)
+        del txt_dfs
+        import gc
+        gc.collect()
+        
+        combined_txt = combined_txt.drop_duplicates().sort_values(sort_cols).reset_index(drop=True)
         
         # Read and deduplicate Parquet data
         try:
-            yearly_pq = pd.read_parquet(yearly_parquet).drop_duplicates().sort_values(sort_cols).reset_index(drop=True)
+            yearly_pq = pd.read_parquet(yearly_parquet)
+            yearly_pq = utils.optimize_df(yearly_pq)
+            yearly_pq = yearly_pq.drop_duplicates().sort_values(sort_cols).reset_index(drop=True)
             utils.compare_dfs(combined_txt, yearly_pq, MARKET_TYPE, f"Year {year_key}", sort_cols)
+            
+            del combined_txt, yearly_pq
+            gc.collect()
         except Exception as e:
             print(f"[ERROR] Failed to read or process {yearly_parquet}: {e}")
 

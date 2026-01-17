@@ -2,8 +2,10 @@
 import os
 import sys
 import re
+import gc
 import pandas as pd
 import numpy as np
+import hashlib
 from pathlib import Path
 from datetime import date
 
@@ -61,69 +63,128 @@ def is_past_year(year_str):
         print(f"[WARN] Failed to parse year {year_str}: {e}")
         return False
 
+def optimize_df(df):
+    """Optimize DataFrame memory usage"""
+    # Convert 'symbol' to category if it exists
+    if 'symbol' in df.columns:
+        df['symbol'] = df['symbol'].astype('category')
+    
+    # Downcast numeric columns
+    for col in df.select_dtypes(include=['int']).columns:
+        df[col] = pd.to_numeric(df[col], downcast='integer')
+    for col in df.select_dtypes(include=['float']).columns:
+        df[col] = pd.to_numeric(df[col], downcast='float')
+    
+    return df
+
+def get_df_hash(df):
+    """Calculate a hash of the dataframe to verify contents without keeping both in memory"""
+    # We sort by columns to ensure deterministic hash
+    # Use only values for hashing, ignore categories vs string differences if any (though we aim for match)
+    # Convert back to standard types for hashing if needed, or just hash the values
+    
+    # Simple hash: sum of numeric columns + hash of string columns head/tail/count
+    # A more robust way:
+    return hashlib.sha256(pd.util.hash_pandas_object(df, index=True).values).hexdigest()
+
 def merge_yearly_and_validate(year_key, files, target_dir, sort_columns):
     """
     Merge monthly files, validate data match, save yearly file, and delete monthly files.
+    Optimized for memory usage with detailed logging.
     """
-    # Sort files to ensure deterministic loading order
     files = sorted(files)
-    print(f"[INFO] Merging {year_key} ({len(files)} files)...")
+    file_count = len(files)
+    print(f"\n[INFO] === Starting Merge for Year: {year_key} ({file_count} monthly files) ===")
 
     try:
-        # Load all monthly files
-        dfs = [pd.read_parquet(f) for f in files]
+        # Load and optimize monthly files one by one
+        dfs = []
+        for i, f in enumerate(files, 1):
+            print(f"  [1/6] Loading & Optimizing: {f.name} ({i}/{file_count})...", end='\r')
+            df = pd.read_parquet(f)
+            df = optimize_df(df)
+            dfs.append(df)
+        print(f"\n  [1/6] Finished loading {file_count} files.")
+            
         if not dfs:
+            print(f"  [SKIP] No dataframes to merge for {year_key}")
             return False
             
+        # Concatenate
+        print(f"  [2/6] Concatenating dataframes...")
         yearly_combined = pd.concat(dfs, ignore_index=True)
         
-        # Drop duplicates before sorting
+        # Free memory
+        del dfs
+        gc.collect()
+        
+        # Drop duplicates
+        print(f"  [3/6] Removing duplicates and sorting (Columns: {sort_columns})...")
         yearly_combined = yearly_combined.drop_duplicates()
         
         # Sort combined data
         if sort_columns:
-            # Check if columns exist before sorting
             available_cols = [c for c in sort_columns if c in yearly_combined.columns]
             if available_cols:
                 yearly_combined = yearly_combined.sort_values(available_cols).reset_index(drop=True)
             else:
-                print(f"[WARN] No sort columns found in {year_key} data. Skipping sort.", file=sys.stderr)
+                print(f"  [WARN] No sort columns found. Skipping sort.", file=sys.stderr)
                 yearly_combined = yearly_combined.reset_index(drop=True)
         else:
             yearly_combined = yearly_combined.reset_index(drop=True)
 
-        # Output path: YYYY/YYYY.parquet
+        # Output path
         output_dir = target_dir / year_key
         output_file = output_dir / f"{year_key}.parquet"
         
         # Save to yearly file
+        print(f"  [4/6] Saving to Parquet: {output_file.name} (Rows: {len(yearly_combined):,})...")
         yearly_combined.to_parquet(output_file, compression='zstd', index=False)
         
-        # VALIDATION
-        # Read back the saved file
-        saved_df = pd.read_parquet(output_file)
+        # Hash for validation
+        print(f"  [5/6] Calculating hash for validation...")
+        original_hash = get_df_hash(yearly_combined)
+        original_len = len(yearly_combined)
         
-        # Sort saved data
+        # Free memory
+        del yearly_combined
+        gc.collect()
+        
+        # VALIDATION
+        print(f"  [6/6] Validating saved file...")
+        saved_df = pd.read_parquet(output_file)
+        saved_df = optimize_df(saved_df)
+        
         if sort_columns:
             available_cols = [c for c in sort_columns if c in saved_df.columns]
-            saved_df = saved_df.sort_values(available_cols).reset_index(drop=True)
-        else:
-            saved_df = saved_df.reset_index(drop=True)
+            if available_cols:
+                saved_df = saved_df.sort_values(available_cols).reset_index(drop=True)
+        
+        saved_hash = get_df_hash(saved_df)
+        saved_len = len(saved_df)
+        
+        if original_len != saved_len:
+            raise ValueError(f"Row count mismatch: {original_len} != {saved_len}")
             
-        # Compare
-        pd.testing.assert_frame_equal(yearly_combined, saved_df)
-        print(f"[OK] Validation passed for {output_file.name}")
+        if original_hash != saved_hash:
+            raise ValueError(f"Hash mismatch: data corruption detected")
+
+        print(f"[OK] Validation passed: {output_file.name} ({saved_len:,} rows)")
+        
+        # Free memory
+        del saved_df
+        gc.collect()
         
         # Cleanup
+        print(f"  [CLEANUP] Deleting {file_count} monthly files...")
         for f in files:
             os.remove(f)
-        print(f"[CLEANUP] Deleted {len(files)} monthly files")
+        print(f"[SUCCESS] {year_key} merge complete.\n")
         
         return True
         
     except Exception as e:
         print(f"[ERROR] Failed to merge {year_key}: {e}", file=sys.stderr)
-        # If created but failed validation, try to delete the potentially corrupt yearly file
         if 'output_file' in locals() and output_file.exists():
             try:
                 os.remove(output_file)
@@ -168,7 +229,7 @@ def read_txt_file(file_path, market_type):
             df['dt'] = pd.to_datetime(date_str + ' ' + df['time'])
             df = df[['symbol', 'dt', 'price', 'volume']]
             
-        return df
+        return optimize_df(df)
     except Exception as e:
         print(f"[ERROR] Failed to read {file_path}: {e}")
         return None
