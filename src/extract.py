@@ -87,35 +87,50 @@ def get_files_to_read(data_dir, start_dt, end_dt):
     return files
 
 
-def extract_kr_1min(symbol, start_date, end_date, data_dir=None):
-    """Extract KR 1-minute data for a symbol within date range"""
-    if data_dir is None:
-        # Default to project root / data / KR-1m
-        script_dir = Path(__file__).parent
-        data_dir = script_dir.parent / "data" / "KR-1m"
-    else:
-        data_dir = Path(data_dir)
+def _extract_generator(symbol, start_date, end_date, data_dir, time_col='dt', end_suffix=' 23:59:59'):
+    """Generic generator for extracting data month by month / file by file."""
+    symbol = symbol.upper()
+    data_dir = Path(data_dir)
     
     start_dt = datetime.strptime(start_date.split()[0], '%Y-%m-%d')
-    end_dt = datetime.strptime(end_date.split()[0] if ' ' in end_date else end_date, '%Y-%m-%d')
-    
-    # Handle optional time in end_date
+    # If end_date has no time, use the end of that day for filtering
     if ' ' in end_date or ':' in end_date:
+        end_dt_str = end_date.split()[0]
         end_boundary = end_date
     else:
-        end_boundary = f"{end_date} 23:59:59"
+        end_dt_str = end_date
+        end_boundary = f"{end_date}{end_suffix}"
+    
+    end_dt = datetime.strptime(end_dt_str, '%Y-%m-%d')
     
     file_paths = get_files_to_read(data_dir, start_dt, end_dt)
     
-    dfs = []
     for file_path in file_paths:
-        df = pd.read_parquet(file_path)
-        df = df[df['symbol'] == symbol]
-        # Filter by time range
-        df = df[(df['dt'] >= start_date) & (df['dt'] <= end_boundary)]
-        if not df.empty:
-            dfs.append(df)
+        try:
+            df = pd.read_parquet(file_path)
+            if df.empty:
+                continue
+                
+            df = df[df['symbol'] == symbol]
+            if df.empty:
+                continue
+                
+            # Filter by date/time range
+            df = df[(df[time_col] >= start_date) & (df[time_col] <= end_boundary)]
+            if not df.empty:
+                yield df.sort_values(time_col)
+        except Exception as e:
+            print(f"[WARN] Failed to read {file_path}: {e}", file=sys.stderr)
+            continue
+
+
+def extract_kr_1min(symbol, start_date, end_date, data_dir=None):
+    """Extract KR 1-minute data for a symbol within date range"""
+    if data_dir is None:
+        script_dir = Path(__file__).parent
+        data_dir = script_dir.parent / "data" / "KR-1m"
     
+    dfs = list(_extract_generator(symbol, start_date, end_date, data_dir, time_col='dt'))
     if dfs:
         return pd.concat(dfs, ignore_index=True).sort_values('dt')
     return pd.DataFrame()
@@ -124,26 +139,11 @@ def extract_kr_1min(symbol, start_date, end_date, data_dir=None):
 def extract_kr_day(symbol, start_date, end_date, data_dir=None):
     """Extract KR daily data for a symbol within date range"""
     if data_dir is None:
-        # Default to project root / data / KR-1d
         script_dir = Path(__file__).parent
         data_dir = script_dir.parent / "data" / "KR-1d"
-    else:
-        data_dir = Path(data_dir)
     
-    start_dt = datetime.strptime(start_date, '%Y-%m-%d')
-    end_dt = datetime.strptime(end_date, '%Y-%m-%d')
-    
-    file_paths = get_files_to_read(data_dir, start_dt, end_dt)
-    
-    dfs = []
-    for file_path in file_paths:
-        df = pd.read_parquet(file_path)
-        df = df[df['symbol'] == symbol]
-        # Filter by date range
-        df = df[(df['date'] >= start_date) & (df['date'] <= end_date)]
-        if not df.empty:
-            dfs.append(df)
-    
+    # Daily data uses 'date' column and usually no time suffix needed for boundary
+    dfs = list(_extract_generator(symbol, start_date, end_date, data_dir, time_col='date', end_suffix=''))
     if dfs:
         return pd.concat(dfs, ignore_index=True).sort_values('date')
     return pd.DataFrame()
@@ -152,32 +152,10 @@ def extract_kr_day(symbol, start_date, end_date, data_dir=None):
 def extract_us_5min(symbol, start_date, end_date, data_dir=None):
     """Extract US 5-minute data for a symbol within date range"""
     if data_dir is None:
-        # Default to project root / data / US-5m
         script_dir = Path(__file__).parent
         data_dir = script_dir.parent / "data" / "US-5m"
-    else:
-        data_dir = Path(data_dir)
     
-    start_dt = datetime.strptime(start_date.split()[0], '%Y-%m-%d')
-    end_dt = datetime.strptime(end_date.split()[0] if ' ' in end_date else end_date, '%Y-%m-%d')
-    
-    # Handle optional time in end_date
-    if ' ' in end_date or ':' in end_date:
-        end_boundary = end_date
-    else:
-        end_boundary = f"{end_date} 23:59:59"
-    
-    file_paths = get_files_to_read(data_dir, start_dt, end_dt)
-    
-    dfs = []
-    for file_path in file_paths:
-        df = pd.read_parquet(file_path)
-        df = df[df['symbol'] == symbol]
-        # Filter by time range
-        df = df[(df['dt'] >= start_date) & (df['dt'] <= end_boundary)]
-        if not df.empty:
-            dfs.append(df)
-    
+    dfs = list(_extract_generator(symbol, start_date, end_date, data_dir, time_col='dt'))
     if dfs:
         return pd.concat(dfs, ignore_index=True).sort_values('dt')
     return pd.DataFrame()
@@ -195,26 +173,43 @@ def main():
     if args.end_date is None:
         args.end_date = args.start_date
     
+    args.symbol = args.symbol.upper()
+    
     # Automatic market detection: Numeric symbols are KR, Alphabetical are US
     is_numeric = args.symbol.replace('.', '').replace('-', '').isdigit()
     
-    try:
-        if args.type == "day":
-            if is_numeric:
-                df = extract_kr_day(args.symbol, args.start_date, args.end_date)
-            else:
-                print(f"[ERROR] US Day data extraction not implemented for '{args.symbol}'")
-                sys.exit(1)
-        else:  # min
-            if is_numeric:
-                df = extract_kr_1min(args.symbol, args.start_date, args.end_date)
-            else:
-                df = extract_us_5min(args.symbol, args.start_date, args.end_date)
-                
-        if df.empty:
-            print("No data found.")
+    # Determine the generator and column names
+    script_dir = Path(__file__).parent
+    if args.type == "day":
+        if is_numeric:
+            data_dir = script_dir.parent / "data" / "KR-1d"
+            gen = _extract_generator(args.symbol, args.start_date, args.end_date, data_dir, time_col='date', end_suffix='')
         else:
-            print(df.to_string(index=False))
+            print(f"[ERROR] US Day data extraction not implemented for '{args.symbol}'", file=sys.stderr)
+            sys.exit(1)
+    else:  # min
+        if is_numeric:
+            data_dir = script_dir.parent / "data" / "KR-1m"
+        else:
+            data_dir = script_dir.parent / "data" / "US-5m"
+        gen = _extract_generator(args.symbol, args.start_date, args.end_date, data_dir, time_col='dt')
+    
+    # Stream the output
+    try:
+        header_printed = False
+        data_found = False
+        
+        for df_chunk in gen:
+            data_found = True
+            # Print without index, and only show header for the first chunk
+            print(df_chunk.to_string(index=False, header=not header_printed))
+            header_printed = True
+            # Flush stdout to ensure immediate visibility
+            sys.stdout.flush()
+            
+        if not data_found:
+            print("No data found.")
+            
     except Exception as e:
         print(f"[ERROR] {e}", file=sys.stderr)
         sys.exit(1)
