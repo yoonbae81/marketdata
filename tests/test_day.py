@@ -14,14 +14,19 @@ from bs4 import BeautifulSoup
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), 'src'))
 
-from day import (
-    parse_day_data,
-    fetch_day_symbol,
-    collect_day_data,
-    main_async,
-    DAY_URL,
-    DAY_HEADERS
-)
+import importlib.util
+src_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'src')
+fetch_day_path = os.path.join(src_path, 'kr-day', 'fetch.py')
+spec = importlib.util.spec_from_file_location("kr_day_fetch", fetch_day_path)
+kr_day_fetch = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(kr_day_fetch)
+
+parse_day_data = kr_day_fetch.parse_day_data
+fetch_day_symbol = kr_day_fetch.fetch_day_symbol
+collect_day_data = kr_day_fetch.collect_day_data
+main_async = kr_day_fetch.main_async
+DAY_URL = kr_day_fetch.DAY_URL
+DAY_HEADERS = kr_day_fetch.DAY_HEADERS
 
 
 class TestParseDayData(unittest.TestCase):

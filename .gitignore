@@ -112,9 +112,13 @@ ENV/
 # mypy
 .mypy_cache/
 
-/resources
-/kr/day
-/kr/minute
-/us/output
+output
+
+# Data files (Parquet format)
+/data/
+*.parquet
+
+# Legacy output directories
+output
 
 .cpcache

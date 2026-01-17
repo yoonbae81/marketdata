@@ -1,8 +1,0 @@
-services:
-  app:
-    build: .
-    container_name: krx-price-app
-    environment:
-      - TZ=Asia/Seoul
-    volumes:
-      - /srv/krx-price:/data

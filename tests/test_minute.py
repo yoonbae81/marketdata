@@ -14,15 +14,20 @@ from bs4 import BeautifulSoup
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), 'src'))
 
-from minute import (
-    parse_minute_rows,
-    fetch_minute_page,
-    fetch_minute_symbol,
-    collect_minute_data,
-    main_async,
-    MINUTE_URL,
-    MINUTE_HEADERS
-)
+import importlib.util
+src_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'src')
+fetch_minute_path = os.path.join(src_path, 'kr-1m', 'fetch.py')
+spec = importlib.util.spec_from_file_location("kr_1m_fetch", fetch_minute_path)
+kr_1m_fetch = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(kr_1m_fetch)
+
+parse_minute_rows = kr_1m_fetch.parse_minute_rows
+fetch_minute_page = kr_1m_fetch.fetch_minute_page
+fetch_minute_symbol = kr_1m_fetch.fetch_minute_symbol
+collect_minute_data = kr_1m_fetch.collect_minute_data
+main_async = kr_1m_fetch.main_async
+MINUTE_URL = kr_1m_fetch.MINUTE_URL
+MINUTE_HEADERS = kr_1m_fetch.MINUTE_HEADERS
 
 
 class TestParseMinuteRows(unittest.TestCase):
@@ -55,20 +60,26 @@ class TestParseMinuteRows(unittest.TestCase):
         """Test parsing multiple minute rows"""
         html = """
         <html>
-            <span class="tah">09:00</span>
-            <span class="tah">70,000</span>
-            <span class="tah">+1,000</span>
-            <span class="tah">69,000</span>
-            <span class="tah">71,000</span>
-            <span class="tah">68,500</span>
-            <span class="tah">1,000</span>
-            <span class="tah">09:01</span>
-            <span class="tah">70,500</span>
-            <span class="tah">+500</span>
-            <span class="tah">70,000</span>
-            <span class="tah">71,000</span>
-            <span class="tah">69,500</span>
-            <span class="tah">800</span>
+            <table class="type2">
+                <tr>
+                    <td><span>09:00</span></td>
+                    <td><span>70,000</span></td>
+                    <td><span>+1,000</span></td>
+                    <td><span>69,000</span></td>
+                    <td><span>71,000</span></td>
+                    <td><span>1,000</span></td>
+                    <td><span>68,500</span></td>
+                </tr>
+                <tr>
+                    <td><span>09:01</span></td>
+                    <td><span>70,500</span></td>
+                    <td><span>+500</span></td>
+                    <td><span>70,000</span></td>
+                    <td><span>71,000</span></td>
+                    <td><span>800</span></td>
+                    <td><span>69,500</span></td>
+                </tr>
+            </table>
         </html>
         """
         bs = BeautifulSoup(html, 'lxml')
@@ -250,20 +261,26 @@ class TestFetchMinuteSymbol(unittest.IsolatedAsyncioTestCase):
         """Test that duplicate times are deduplicated"""
         html = """
         <html>
-            <span class="tah">09:00</span>
-            <span class="tah">70,000</span>
-            <span class="tah">+1,000</span>
-            <span class="tah">69,000</span>
-            <span class="tah">71,000</span>
-            <span class="tah">68,500</span>
-            <span class="tah">1,000</span>
-            <span class="tah">09:00</span>
-            <span class="tah">70,100</span>
-            <span class="tah">+1,100</span>
-            <span class="tah">69,000</span>
-            <span class="tah">71,000</span>
-            <span class="tah">68,500</span>
-            <span class="tah">1,100</span>
+            <table class="type2">
+                <tr>
+                    <td><span>09:00</span></td>
+                    <td><span>70,000</span></td>
+                    <td><span>+1,000</span></td>
+                    <td><span>69,000</span></td>
+                    <td><span>71,000</span></td>
+                    <td><span>1,000</span></td>
+                    <td><span>68,500</span></td>
+                </tr>
+                <tr>
+                    <td><span>09:00</span></td>
+                    <td><span>70,100</span></td>
+                    <td><span>+1,100</span></td>
+                    <td><span>69,000</span></td>
+                    <td><span>71,000</span></td>
+                    <td><span>1,100</span></td>
+                    <td><span>68,500</span></td>
+                </tr>
+            </table>
         </html>
         """
         

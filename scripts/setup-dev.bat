@@ -1,53 +1,24 @@
 @echo off
-setlocal
-REM Setup development environment on Windows
-REM Sets up local development environment for KRX Price Collector
+REM Development Environment Setup Script for Windows
+REM Sets up local development environment for MarketData
 
-echo [INFO] Setting up KRX Price Collector development environment...
+echo Setting up MarketData development environment...
 echo.
 
-REM Check for Python (Required)
+REM Check for Python
 where python >nul 2>nul
 if %errorlevel% neq 0 (
     echo [ERROR] Python is not installed
-    echo    Please install Python 3.11 or later
+    echo Please install Python 3.11 or later
     exit /b 1
 )
 echo [OK] Python is installed
-
-REM Check if Docker is installed (Optional)
-set DOCKER_FOUND=0
-where docker >nul 2>nul
-if %errorlevel% equ 0 (
-    echo [OK] Docker is installed
-    set DOCKER_FOUND=1
-) else (
-    echo [WARN] Docker is not installed
-    echo    Docker is used for containerized execution.
-    echo    Please install Docker Desktop: https://www.docker.com/products/docker-desktop
-)
-
-REM Check if Docker Compose is available (Optional)
-set COMPOSE_FOUND=0
-if %DOCKER_FOUND% equ 1 (
-    docker compose version >nul 2>nul
-    if %errorlevel% equ 0 (
-        echo [OK] Docker Compose is available
-        set COMPOSE_FOUND=1
-    ) else (
-        echo [WARN] Docker Compose is not available
-    )
-)
 echo.
 
 REM Create .venv if it doesn't exist
 if not exist ".venv" (
     echo [INFO] Creating Python virtual environment (.venv)...
     python -m venv .venv
-    if %errorlevel% neq 0 (
-        echo [ERROR] Failed to create virtual environment.
-        exit /b 1
-    )
     echo [OK] Virtual environment created
     echo.
     
@@ -55,10 +26,6 @@ if not exist ".venv" (
     call .venv\Scripts\activate.bat
     python -m pip install --upgrade pip
     pip install -r requirements.txt
-    if %errorlevel% neq 0 (
-        echo [ERROR] Failed to install dependencies.
-        exit /b 1
-    )
     echo [OK] Dependencies installed
     echo.
 ) else (
@@ -66,49 +33,39 @@ if not exist ".venv" (
     echo.
 )
 
-REM Build Docker images
-if %COMPOSE_FOUND% equ 1 (
-    echo [INFO] Building Docker images...
-    docker compose build
-    if %errorlevel% equ 0 (
-        echo [OK] Docker images built
-    ) else (
-        echo [WARN] Docker build failed.
-    )
-    echo.
-)
+REM Create necessary directories
+echo [INFO] Creating data directories...
+if not exist "data\KR-1m" mkdir data\KR-1m
+if not exist "data\KR-1d" mkdir data\KR-1d
+if not exist "data\US-5m" mkdir data\US-5m
+echo [OK] Directories created
+echo.
 
 REM Run tests to verify setup
 echo [INFO] Running initial tests to verify setup...
 if not defined VIRTUAL_ENV (
     call .venv\Scripts\activate.bat
 )
-python -m unittest tests.test_symbol.TestParseSymbols -v
+python -m unittest discover tests -v
 if %errorlevel% neq 0 (
-    echo [WARN] Initial tests failed. Please check your environment.
+    echo [WARN] Some tests failed. Please check your environment.
 )
 echo.
 
 echo ============================================================
-echo [DONE] Development environment setup complete!
+echo [DONE] MarketData local environment setup complete!
 echo ============================================================
 echo.
 echo Next steps:
 echo.
-echo 1. Activate virtual environment (for local development/tests):
+echo 1. Activate virtual environment:
 echo    .venv\Scripts\activate.bat
 echo.
-echo 2. Run unit tests:
-echo    python -m unittest tests.test_symbol tests.test_day tests.test_minute -v
+echo 2. Run the fetch script:
+echo    python src\fetch_kr1m.py -d 2026-01-17
 echo.
-echo 3. Run integration tests (real API calls):
-echo    python -m unittest tests.test_integration -v
-echo.
-echo 4. Run using Docker Compose (immediate execution):
-echo    docker compose run --rm app
-echo.
-echo Note: For production deployment with automatic scheduling,
-echo    use setup-systemd.sh on a Linux server
+echo 3. Extract data:
+echo    python src\extract.py min 005930 2026-01-17 2026-01-17
 echo.
 
 endlocal

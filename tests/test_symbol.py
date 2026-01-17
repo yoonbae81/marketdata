@@ -14,7 +14,7 @@ from io import StringIO
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), 'src'))
 
-from symbol import (
+from symbols.fetch import (
     parse_symbols,
     fetch_symbols,
     main_async,

@@ -1,4 +1,6 @@
 requests
-beautifulsoup4
 aiohttp
+beautifulsoup4
 lxml
+pandas
+pyarrow

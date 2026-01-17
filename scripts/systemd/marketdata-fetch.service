@@ -1,0 +1,13 @@
+[Unit]
+Description=MarketData Fetch Service
+After=network.target
+
+[Service]
+Type=oneshot
+WorkingDirectory={{PROJECT_ROOT}}
+# Run the fetch script using bash
+ExecStart=/bin/bash {{PROJECT_ROOT}}/scripts/fetch.sh
+User={{USER}}
+
+[Install]
+WantedBy=multi-user.target

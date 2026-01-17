@@ -1,5 +1,5 @@
 [Unit]
-Description=Run krx-price Data Collection periodically
+Description=MarketData Collection Timer
 
 [Timer]
 OnCalendar=Mon..Fri *-*-* 17:00:00

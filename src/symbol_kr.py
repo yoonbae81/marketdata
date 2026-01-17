@@ -9,8 +9,7 @@ import asyncio
 import aiohttp
 import json
 import sys
-from datetime import datetime
-
+import os
 
 SYMBOL_URLS = {
     'KOSPI': 'https://finance.daum.net/api/quotes/stocks?market=KOSPI',
@@ -58,29 +57,36 @@ async def fetch_symbols(market='KOSPI'):
             return []
 
 
-async def main_async(market=None):
-    """Main async entry point"""
+async def get_all_symbols(market=None):
+    """Fetch symbols from KOSPI, KOSDAQ or both"""
     if market:
-        # Fetch specific market
-        symbols = await fetch_symbols(market)
-        if not symbols:
-            print(f'[ERROR] No {market} symbols found', file=sys.stderr)
-            return 1
-    else:
-        # Fetch all markets
-        print('[INFO] Fetching symbols from all markets...', file=sys.stderr)
-        kospi_symbols, kosdaq_symbols = await asyncio.gather(
-            fetch_symbols('KOSPI'),
-            fetch_symbols('KOSDAQ')
-        )
-        symbols = kospi_symbols + kosdaq_symbols
-        if not symbols:
-            print('[ERROR] No symbols found', file=sys.stderr)
-            return 1
+        return await fetch_symbols(market)
     
-    # Output symbols to stdout (one per line)
-    for symbol in symbols:
-        print(symbol)
+    kospi_symbols, kosdaq_symbols = await asyncio.gather(
+        fetch_symbols('KOSPI'),
+        fetch_symbols('KOSDAQ')
+    )
+    # Return as a unique sorted list
+    return sorted(list(set(kospi_symbols + kosdaq_symbols)))
+
+
+async def main_async(market=None, output_file=None):
+    """Main async entry point"""
+    symbols = await get_all_symbols(market)
+    
+    if not symbols:
+        return 1
+    
+    if output_file:
+        os.makedirs(os.path.dirname(os.path.abspath(output_file)), exist_ok=True)
+        with open(output_file, 'w', encoding='utf-8') as f:
+            for symbol in symbols:
+                f.write(f"{symbol}\n")
+        print(f'[INFO] Saved {len(symbols)} symbols to {output_file}', file=sys.stderr)
+    else:
+        # Output symbols to stdout
+        for symbol in symbols:
+            print(symbol)
     
     return 0
 
@@ -92,10 +98,13 @@ def main():
                        choices=['KOSPI', 'KOSDAQ'],
                        default=None,
                        help='Market to fetch symbols from (default: both KOSPI and KOSDAQ)')
+    parser.add_argument('-o', '--output',
+                       help='Output file path')
     args = parser.parse_args()
     
     try:
-        exit_code = asyncio.run(main_async(args.market))
+        # Use asyncio.run for cleaner entry
+        exit_code = asyncio.run(main_async(args.market, args.output))
         sys.exit(exit_code)
     except KeyboardInterrupt:
         print('\n[INFO] Interrupted by user', file=sys.stderr)

@@ -9,8 +9,14 @@ import asyncio
 import aiohttp
 import re
 import sys
+import os
 from datetime import datetime
 from bs4 import BeautifulSoup
+from pathlib import Path
+
+# Add project root to sys.path to allow importing from other components
+sys.path.append(str(Path(__file__).resolve().parent))
+from symbol_kr import get_all_symbols
 
 
 MINUTE_URL = 'https://finance.naver.com/item/sise_time.nhn'
@@ -90,12 +96,9 @@ async def fetch_minute_symbol(session, symbol, date_str, semaphore):
     if not all_results:
         return []
 
-    # To find last page, we need page 1's BS again or just fetch it inside here
-    # Optimization: fetch_minute_page could return (results, last_page) but for simplicity:
     params = { 'page': 1, 'code': symbol, 'thistime': date_str.replace('-', '') + '235959' }
     
     try:
-        # We need the BS to find pgRR
         async with semaphore:
             async with session.get(MINUTE_URL, params=params, headers=MINUTE_HEADERS, timeout=15) as response:
                 if response.status != 200:
@@ -138,35 +141,13 @@ async def fetch_minute_symbol(session, symbol, date_str, semaphore):
         return ['\t'.join(r) for r in all_results]
 
 
-async def minute_worker(queue, session, date_str, semaphore, results_file, lock):
-    """Worker to process symbols from a queue and write to file immediately"""
-    while True:
-        symbol = await queue.get()
-        try:
-            # Fetch all minute data for the symbol
-            symbol_results = await fetch_minute_symbol(session, symbol, date_str, semaphore)
-            if symbol_results and results_file:
-                async with lock:
-                    with open(results_file, 'a', encoding='utf-8') as f:
-                        for line in symbol_results:
-                            f.write(line + '\n')
-        except Exception as e:
-            print(f"[ERROR] Worker error for {symbol}: {e}", file=sys.stderr)
-        finally:
-            queue.task_done()
-
 
 async def collect_minute_data(date_str, symbols, concurrency, output_file):
     """Memory-safe collection of minute data using worker-queue pattern"""
-    print(f'[INFO] Collecting minute data for {date_str} (output: {output_file})...', file=sys.stderr)
+    print(f'[INFO] Collecting minute data for {date_str}...', file=sys.stderr)
     
-    # Ensure output directory exists and file is empty
-    from pathlib import Path
-    out_path = Path(output_file)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(out_path, 'w', encoding='utf-8') as f:
-        pass
-
+    # Collect data in memory first
+    all_data = []
     queue = asyncio.Queue()
     for s in symbols:
         queue.put_nowait(s)
@@ -175,29 +156,55 @@ async def collect_minute_data(date_str, symbols, concurrency, output_file):
     semaphore = asyncio.Semaphore(concurrency)
     lock = asyncio.Lock()
     
+    async def worker():
+        while True:
+            symbol = await queue.get()
+            try:
+                symbol_results = await fetch_minute_symbol(session, symbol, date_str, semaphore)
+                if symbol_results:
+                    async with lock:
+                        for line in symbol_results:
+                            parts = line.split('\t')
+                            if len(parts) >= 4:
+                                all_data.append({
+                                    'symbol': parts[0],
+                                    'price': int(parts[1]),
+                                    'volume': int(parts[2]),
+                                    'time': parts[3]
+                                })
+            except Exception as e:
+                print(f"[ERROR] Worker error for {symbol}: {e}", file=sys.stderr)
+            finally:
+                queue.task_done()
+    
     async with aiohttp.ClientSession(connector=connector) as session:
-        # Use a fixed number of workers (equal to concurrency is usually good)
-        workers = [asyncio.create_task(minute_worker(queue, session, date_str, semaphore, output_file, lock))
-                   for _ in range(concurrency)]
-        
+        workers = [asyncio.create_task(worker()) for _ in range(concurrency)]
         await queue.join()
-        
         for w in workers:
             w.cancel()
     
+    # Convert to DataFrame and save as Parquet
+    if all_data:
+        import pandas as pd
+        df = pd.DataFrame(all_data)
+        df['dt'] = pd.to_datetime(date_str + ' ' + df['time'])
+        df = df[['symbol', 'dt', 'price', 'volume']]
+        
+        # Ensure output directory exists
+        out_path = Path(output_file)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Save as Parquet
+        df.to_parquet(output_file, compression='snappy', index=False)
+        print(f'[INFO] Saved {len(df)} records to {output_file}', file=sys.stderr)
+    
     print(f'[INFO] Minute data collection finished for {date_str}', file=sys.stderr)
-    return None  # No longer returning a massive list
+    return None
 
 
 async def main_async(date, symbols, concurrency):
     """Main async entry point"""
     results = await collect_minute_data(date, symbols, concurrency)
-    
-    # Output results to stdout (sorted by time - 4th column)
-    sorted_lines = sorted(results, key=lambda x: x.split('\t')[3] if len(x.split('\t')) > 3 else '')
-    for line in sorted_lines:
-        print(line)
-    
     return 0
 
 
@@ -208,30 +215,50 @@ def main():
                        default=datetime.now().strftime('%Y-%m-%d'),
                        help='Date to collect data for (format: YYYY-MM-DD)')
     parser.add_argument('-s', '--symbols',
-                       required=True,
-                       help='Comma-separated list of symbols or path to file with symbols')
+                       help='Comma-separated list of symbols or path to file with symbols. If omitted, fetches active symbols.')
     parser.add_argument('-c', '--concurrency',
                        type=int,
                        default=20,
                        help='Max concurrent requests')
+    parser.add_argument('-o', '--output',
+                       help='Output file path (default: data/KR-1m/YYYY/YYYY-MM-DD.parquet)')
     
     args = parser.parse_args()
     
-    # Parse symbols
-    if ',' in args.symbols:
-        symbols = args.symbols.split(',')
+    # Parse symbols or fetch if not provided
+    if args.symbols:
+        if ',' in args.symbols:
+            symbols = args.symbols.split(',')
+        else:
+            # Assume it's a file path
+            try:
+                with open(args.symbols, 'r') as f:
+                    symbols = [line.strip() for line in f if line.strip()]
+            except FileNotFoundError:
+                print(f'[ERROR] Symbols file not found: {args.symbols}', file=sys.stderr)
+                sys.exit(1)
     else:
-        # Assume it's a file path
+        # Auto-fetch symbols
         try:
-            with open(args.symbols, 'r') as f:
-                symbols = [line.strip() for line in f if line.strip()]
-        except FileNotFoundError:
-            print(f'[ERROR] Symbols file not found: {args.symbols}', file=sys.stderr)
+            symbols = asyncio.run(get_all_symbols())
+            print(f'[INFO] Auto-fetched {len(symbols)} symbols', file=sys.stderr)
+        except Exception as e:
+            print(f'[ERROR] Failed to auto-fetch symbols: {e}', file=sys.stderr)
             sys.exit(1)
     
+    # Determine output file
+    if args.output:
+        output_file = args.output
+    else:
+        year = args.date.split('-')[0]
+        project_root = Path(__file__).resolve().parent.parent
+        output_dir = project_root / "data" / "KR-1m" / year
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_file = str(output_dir / f"{args.date}.parquet")
+
     try:
-        exit_code = asyncio.run(main_async(args.date, symbols, args.concurrency))
-        sys.exit(exit_code)
+        asyncio.run(collect_minute_data(args.date, symbols, args.concurrency, output_file))
+        sys.exit(0)
     except KeyboardInterrupt:
         print('\n[INFO] Interrupted by user', file=sys.stderr)
         sys.exit(1)

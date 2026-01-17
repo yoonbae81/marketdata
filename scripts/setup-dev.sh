@@ -1,10 +1,10 @@
 #!/bin/bash
 # Development Environment Setup Script for macOS/Linux
-# Sets up local development environment for KRX Price Collector
+# Sets up local development environment for MarketData
 
 set -e
 
-echo "🔧 Setting up KRX Price Collector development environment..."
+echo "🔧 Setting up MarketData development environment..."
 echo ""
 
 # Check for Python (Required)
@@ -14,28 +14,6 @@ if ! command -v python3 &> /dev/null; then
     exit 1
 fi
 echo "✅ Python 3 is installed"
-
-# Check if Docker is installed (Optional)
-DOCKER_FOUND=0
-if ! command -v docker &> /dev/null; then
-    echo "⚠️  WARNING: Docker is not installed"
-    echo "   Docker is used for containerized execution."
-    echo "   Please install Docker: https://www.docker.com/get-started"
-else
-    echo "✅ Docker is installed"
-    DOCKER_FOUND=1
-fi
-
-# Check if Docker Compose is available (Optional)
-COMPOSE_FOUND=0
-if [ $DOCKER_FOUND -eq 1 ]; then
-    if ! docker compose version &> /dev/null; then
-        echo "⚠️  WARNING: Docker Compose is not available"
-    else
-        echo "✅ Docker Compose is available"
-        COMPOSE_FOUND=1
-    fi
-fi
 echo ""
 
 # Create .venv if it doesn't exist
@@ -56,45 +34,39 @@ else
     echo ""
 fi
 
-# Build Docker images
-if [ $COMPOSE_FOUND -eq 1 ]; then
-    echo "🐳 Building Docker images..."
-    if docker compose build; then
-        echo "✅ Docker images built"
-    else
-        echo "⚠️  WARNING: Docker build failed"
-    fi
-    echo ""
-fi
+# Create necessary directories
+echo "📁 Creating data directories..."
+mkdir -p data/KR-1m
+mkdir -p data/KR-1d
+mkdir -p data/US-5m
+echo "✅ Directories created"
+echo ""
 
 # Run initial tests to verify setup
 echo "🧪 Running initial tests to verify setup..."
 source .venv/bin/activate
-if python -m unittest tests.test_symbol.TestParseSymbols -v; then
+if python -m unittest discover tests -v; then
     echo "✅ Initial tests passed"
 else
-    echo "⚠️  WARNING: Initial tests failed. Please check your environment."
+    echo "⚠️  WARNING: Some tests failed. Please check your environment."
 fi
 echo ""
 
-echo "=" | tr '=' '=' | head -c 60; echo ""
-echo "✅ Development environment setup complete!"
-echo "=" | tr '=' '=' | head -c 60; echo ""
+echo "============================================================"
+echo "✅ MarketData local environment setup complete!"
+echo "============================================================"
 echo ""
 echo "📋 Next steps:"
 echo ""
-echo "1. Activate virtual environment (for local development/tests):"
+echo "1. Activate virtual environment:"
 echo "   source .venv/bin/activate"
 echo ""
-echo "2. Run unit tests:"
-echo "   python -m unittest tests.test_symbol tests.test_day tests.test_minute -v"
+echo "2. Run the fetch script:"
+echo "   bash scripts/fetch.sh -d 2026-01-17"
 echo ""
-echo "3. Run integration tests (real API calls):"
-echo "   python -m unittest tests.test_integration -v"
-echo ""
-echo "4. Run using Docker Compose (immediate execution):"
-echo "   docker compose run --rm app"
+echo "3. Extract data:"
+echo "   python src/extract.py min 005930 2026-01-17 2026-01-17"
 echo ""
 echo "📌 Note: For production deployment with automatic scheduling,"
-echo "   use scripts/setup-systemd.sh on a Linux server"
+echo "   use scripts/install-systemd-timer.sh"
 echo ""
