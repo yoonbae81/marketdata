@@ -83,7 +83,9 @@ async def fetch_day_symbol(session, symbol, date, semaphore):
 
 async def collect_day_data(date, symbols, concurrency, output_file=None):
     """Memory-safe collection of daily data"""
+    total_symbols = len(symbols)
     print(f'[INFO] Collecting day data for {date}...', file=sys.stderr)
+    print(f'[INFO] Total symbols to process: {total_symbols}', file=sys.stderr)
     
     all_data = []
     queue = asyncio.Queue()
@@ -93,14 +95,18 @@ async def collect_day_data(date, symbols, concurrency, output_file=None):
     connector = aiohttp.TCPConnector(limit=0, ttl_dns_cache=300)
     semaphore = asyncio.Semaphore(concurrency)
     lock = asyncio.Lock()
+    processed_count = 0
+    success_count = 0
     
     async def worker():
+        nonlocal processed_count, success_count
         while True:
             symbol = await queue.get()
             try:
                 res = await fetch_day_symbol(session, symbol, date, semaphore)
-                if res:
-                    async with lock:
+                async with lock:
+                    processed_count += 1
+                    if res:
                         parts = res.split('\t')
                         if len(parts) >= 6:
                             all_data.append({
@@ -111,8 +117,15 @@ async def collect_day_data(date, symbols, concurrency, output_file=None):
                                 'close': int(parts[4]),
                                 'volume': int(parts[5])
                             })
+                            success_count += 1
+                    # Log progress every 100 symbols
+                    if processed_count % 100 == 0:
+                        progress_pct = (processed_count / total_symbols) * 100
+                        print(f'[PROGRESS] {processed_count}/{total_symbols} symbols processed ({progress_pct:.1f}%) - {success_count} records collected', file=sys.stderr)
             except Exception as e:
                 print(f"[ERROR] Worker error for {symbol}: {e}", file=sys.stderr)
+                async with lock:
+                    processed_count += 1
             finally:
                 queue.task_done()
     
@@ -121,6 +134,8 @@ async def collect_day_data(date, symbols, concurrency, output_file=None):
         await queue.join()
         for w in workers:
             w.cancel()
+    
+    print(f'[INFO] Completed processing {processed_count}/{total_symbols} symbols - {success_count} records collected', file=sys.stderr)
     
     # Save as Parquet if output_file provided
     if output_file and all_data:
