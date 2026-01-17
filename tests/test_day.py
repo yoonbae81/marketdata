@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), 'src
 
 import importlib.util
 src_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'src')
-fetch_day_path = os.path.join(src_path, 'kr-day', 'fetch.py')
+fetch_day_path = os.path.join(src_path, 'fetch_kr1d.py')
 spec = importlib.util.spec_from_file_location("kr_day_fetch", fetch_day_path)
 kr_day_fetch = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(kr_day_fetch)
@@ -250,7 +250,7 @@ class TestCollectDayData(unittest.IsolatedAsyncioTestCase):
     
     async def test_collect_day_data_success(self):
         """Test successful collection of day data"""
-        with patch('day.fetch_day_symbol', new_callable=AsyncMock) as mock_fetch:
+        with patch.object(kr_day_fetch, 'fetch_day_symbol', new_callable=AsyncMock) as mock_fetch:
             mock_fetch.side_effect = [
                 '005930\t69000\t71000\t68500\t70000\t1000000',
                 '000660\t120000\t125000\t119000\t123000\t500000',
@@ -265,7 +265,7 @@ class TestCollectDayData(unittest.IsolatedAsyncioTestCase):
     
     async def test_collect_day_data_with_output_file(self):
         """Test collection with output file"""
-        with patch('day.fetch_day_symbol', new_callable=AsyncMock) as mock_fetch:
+        with patch.object(kr_day_fetch, 'fetch_day_symbol', new_callable=AsyncMock) as mock_fetch:
             mock_fetch.side_effect = [
                 '005930\t69000\t71000\t68500\t70000\t1000000',
                 '000660\t120000\t125000\t119000\t123000\t500000'
@@ -280,7 +280,7 @@ class TestCollectDayData(unittest.IsolatedAsyncioTestCase):
     
     async def test_collect_day_data_empty_results(self):
         """Test when all symbols return None"""
-        with patch('day.fetch_day_symbol', new_callable=AsyncMock) as mock_fetch:
+        with patch.object(kr_day_fetch, 'fetch_day_symbol', new_callable=AsyncMock) as mock_fetch:
             mock_fetch.return_value = None
             
             symbols = ['005930', '000660']
@@ -294,7 +294,7 @@ class TestMainAsync(unittest.IsolatedAsyncioTestCase):
     
     async def test_main_async_success(self):
         """Test main_async with successful data collection"""
-        with patch('day.collect_day_data', new_callable=AsyncMock) as mock_collect:
+        with patch.object(kr_day_fetch, 'collect_day_data', new_callable=AsyncMock) as mock_collect:
             mock_collect.return_value = [
                 '005930\t69000\t71000\t68500\t70000\t1000000',
                 '000660\t120000\t125000\t119000\t123000\t500000'

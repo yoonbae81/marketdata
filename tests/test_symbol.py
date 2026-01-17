@@ -14,13 +14,12 @@ from io import StringIO
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), 'src'))
 
-from symbols.fetch import (
-    parse_symbols,
-    fetch_symbols,
-    main_async,
-    SYMBOL_URLS,
-    SYMBOL_HEADERS
-)
+import symbol_kr
+parse_symbols = symbol_kr.parse_symbols
+fetch_symbols = symbol_kr.fetch_symbols
+main_async = symbol_kr.main_async
+SYMBOL_URLS = symbol_kr.SYMBOL_URLS
+SYMBOL_HEADERS = symbol_kr.SYMBOL_HEADERS
 
 
 class TestParseSymbols(unittest.TestCase):
@@ -89,7 +88,7 @@ class TestFetchSymbols(unittest.IsolatedAsyncioTestCase):
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=None)
         
-        with patch('symbol.aiohttp.ClientSession', return_value=mock_session):
+        with patch('symbol_kr.aiohttp.ClientSession', return_value=mock_session):
             result = await fetch_symbols('KOSPI')
         
         self.assertEqual(len(result), 2)
@@ -115,7 +114,7 @@ class TestFetchSymbols(unittest.IsolatedAsyncioTestCase):
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=None)
         
-        with patch('symbol.aiohttp.ClientSession', return_value=mock_session):
+        with patch('symbol_kr.aiohttp.ClientSession', return_value=mock_session):
             result = await fetch_symbols('KOSDAQ')
         
         self.assertEqual(len(result), 1)
@@ -133,7 +132,7 @@ class TestFetchSymbols(unittest.IsolatedAsyncioTestCase):
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=None)
         
-        with patch('symbol.aiohttp.ClientSession', return_value=mock_session):
+        with patch('symbol_kr.aiohttp.ClientSession', return_value=mock_session):
             result = await fetch_symbols('KOSPI')
         
         self.assertEqual(result, [])
@@ -151,7 +150,7 @@ class TestFetchSymbols(unittest.IsolatedAsyncioTestCase):
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=None)
         
-        with patch('symbol.aiohttp.ClientSession', return_value=mock_session):
+        with patch('symbol_kr.aiohttp.ClientSession', return_value=mock_session):
             result = await fetch_symbols('KOSPI')
         
         self.assertEqual(result, [])
@@ -162,7 +161,7 @@ class TestMainAsync(unittest.IsolatedAsyncioTestCase):
     
     async def test_main_async_specific_market(self):
         """Test main_async with specific market"""
-        with patch('symbol.fetch_symbols', new_callable=AsyncMock) as mock_fetch:
+        with patch('symbol_kr.fetch_symbols', new_callable=AsyncMock) as mock_fetch:
             mock_fetch.return_value = ['005930', '000660']
             
             # Capture stdout
@@ -179,7 +178,7 @@ class TestMainAsync(unittest.IsolatedAsyncioTestCase):
     
     async def test_main_async_all_markets(self):
         """Test main_async with all markets"""
-        with patch('symbol.fetch_symbols', new_callable=AsyncMock) as mock_fetch:
+        with patch('symbol_kr.fetch_symbols', new_callable=AsyncMock) as mock_fetch:
             # Mock different returns for KOSPI and KOSDAQ
             mock_fetch.side_effect = [
                 ['005930', '000660'],  # KOSPI
@@ -200,7 +199,7 @@ class TestMainAsync(unittest.IsolatedAsyncioTestCase):
     
     async def test_main_async_no_symbols_found(self):
         """Test main_async when no symbols are found"""
-        with patch('symbol.fetch_symbols', new_callable=AsyncMock) as mock_fetch:
+        with patch('symbol_kr.fetch_symbols', new_callable=AsyncMock) as mock_fetch:
             mock_fetch.return_value = []
             
             result = await main_async('KOSPI')
@@ -209,7 +208,7 @@ class TestMainAsync(unittest.IsolatedAsyncioTestCase):
     
     async def test_main_async_all_markets_no_symbols(self):
         """Test main_async with all markets returning no symbols"""
-        with patch('symbol.fetch_symbols', new_callable=AsyncMock) as mock_fetch:
+        with patch('symbol_kr.fetch_symbols', new_callable=AsyncMock) as mock_fetch:
             mock_fetch.side_effect = [[], []]  # Both markets return empty
             
             result = await main_async(None)

@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), 'src
 
 import importlib.util
 src_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'src')
-fetch_minute_path = os.path.join(src_path, 'kr-1m', 'fetch.py')
+fetch_minute_path = os.path.join(src_path, 'fetch_kr1m.py')
 spec = importlib.util.spec_from_file_location("kr_1m_fetch", fetch_minute_path)
 kr_1m_fetch = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(kr_1m_fetch)
@@ -250,7 +250,7 @@ class TestFetchMinuteSymbol(unittest.IsolatedAsyncioTestCase):
         
         semaphore = asyncio.Semaphore(1)
         
-        with patch('minute.fetch_minute_page', new_callable=AsyncMock) as mock_fetch_page:
+        with patch.object(kr_1m_fetch, 'fetch_minute_page', new_callable=AsyncMock) as mock_fetch_page:
             mock_fetch_page.return_value = [['005930', '70500', '800', '09:01']]
             mock_session.get = MagicMock(return_value=mock_response1)
             
@@ -332,7 +332,7 @@ class TestCollectMinuteData(unittest.IsolatedAsyncioTestCase):
     
     async def test_collect_minute_data_success(self):
         """Test successful collection of minute data"""
-        with patch('minute.fetch_minute_symbol', new_callable=AsyncMock) as mock_fetch:
+        with patch.object(kr_1m_fetch, 'fetch_minute_symbol', new_callable=AsyncMock) as mock_fetch:
             mock_fetch.side_effect = [
                 ['005930\t70000\t1000\t09:00', '005930\t70500\t800\t09:01'],
                 ['000660\t120000\t500\t09:00'],
@@ -347,7 +347,7 @@ class TestCollectMinuteData(unittest.IsolatedAsyncioTestCase):
     
     async def test_collect_minute_data_with_output_file(self):
         """Test collection with output file"""
-        with patch('minute.fetch_minute_symbol', new_callable=AsyncMock) as mock_fetch:
+        with patch.object(kr_1m_fetch, 'fetch_minute_symbol', new_callable=AsyncMock) as mock_fetch:
             mock_fetch.side_effect = [
                 ['005930\t70000\t1000\t09:00'],
                 ['000660\t120000\t500\t09:00']
@@ -362,7 +362,7 @@ class TestCollectMinuteData(unittest.IsolatedAsyncioTestCase):
     
     async def test_collect_minute_data_sorting(self):
         """Test that results are sorted by time"""
-        with patch('minute.fetch_minute_symbol', new_callable=AsyncMock) as mock_fetch:
+        with patch.object(kr_1m_fetch, 'fetch_minute_symbol', new_callable=AsyncMock) as mock_fetch:
             mock_fetch.side_effect = [
                 ['005930\t70500\t800\t09:01', '005930\t70000\t1000\t09:00'],
             ]
@@ -383,7 +383,7 @@ class TestMainAsync(unittest.IsolatedAsyncioTestCase):
     
     async def test_main_async_success(self):
         """Test main_async with successful data collection"""
-        with patch('minute.collect_minute_data', new_callable=AsyncMock) as mock_collect:
+        with patch.object(kr_1m_fetch, 'collect_minute_data', new_callable=AsyncMock) as mock_collect:
             mock_collect.return_value = [
                 '005930\t70000\t1000\t09:00',
                 '005930\t70500\t800\t09:01'
