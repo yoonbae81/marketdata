@@ -142,7 +142,7 @@ async def fetch_minute_symbol(session, symbol, date_str, semaphore):
 
 
 
-async def collect_minute_data(date_str, symbols, concurrency):
+async def collect_minute_data(date_str, symbols, concurrency, output_file=None):
     """Memory-safe collection of minute data using worker-queue pattern"""
     print(f'[INFO] Collecting minute data for {date_str}...', file=sys.stderr)
     
@@ -183,28 +183,42 @@ async def collect_minute_data(date_str, symbols, concurrency):
         for w in workers:
             w.cancel()
     
-    # Convert to DataFrame and save as Parquet
+    # Convert to DataFrame and optionally save as Parquet
     if all_data:
         import pandas as pd
         df = pd.DataFrame(all_data)
         df['dt'] = pd.to_datetime(date_str + ' ' + df['time'])
+        
+        # Keep time column for return value before selecting final columns
+        result_data = [f"{row['symbol']}\t{row['price']}\t{row['volume']}\t{row['time']}" 
+                      for _, row in df.iterrows()]
+        
+        # Now select final columns for saving
         df = df[['symbol', 'dt', 'price', 'volume']]
         
-        # Ensure output directory exists
-        out_path = Path(output_file)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
+        if output_file:
+            # Ensure output directory exists
+            out_path = Path(output_file)
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Save as Parquet
+            df.to_parquet(output_file, compression='zstd', index=False)
+            print(f'[INFO] Saved {len(df)} records to {output_file}', file=sys.stderr)
         
-        # Save as Parquet
-        df.to_parquet(output_file, compression='zstd', index=False)
-        print(f'[INFO] Saved {len(df)} records to {output_file}', file=sys.stderr)
+        return result_data
     
     print(f'[INFO] Minute data collection finished for {date_str}', file=sys.stderr)
-    return None
+    return []
 
 
-async def main_async(date, symbols, concurrency):
+async def main_async(date, symbols, concurrency, output_file=None):
     """Main async entry point"""
-    results = await collect_minute_data(date, symbols, concurrency)
+    results = await collect_minute_data(date, symbols, concurrency, output_file)
+    
+    # Print results to stdout
+    for line in results:
+        print(line)
+    
     return 0
 
 

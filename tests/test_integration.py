@@ -17,21 +17,23 @@ from datetime import datetime, timedelta
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), 'src'))
 
-from symbols.fetch import fetch_symbols, parse_symbols
+import symbol_kr
+fetch_symbols = symbol_kr.fetch_symbols
+parse_symbols = symbol_kr.parse_symbols
 
 import importlib.util
 src_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'src')
 
-# Load kr-day
-fetch_day_path = os.path.join(src_path, 'kr-day', 'fetch.py')
+# Load fetch_kr1d
+fetch_day_path = os.path.join(src_path, 'fetch_kr1d.py')
 day_spec = importlib.util.spec_from_file_location("kr_day_fetch", fetch_day_path)
 kr_day_fetch = importlib.util.module_from_spec(day_spec)
 day_spec.loader.exec_module(kr_day_fetch)
 fetch_day_symbol = kr_day_fetch.fetch_day_symbol
 parse_day_data = kr_day_fetch.parse_day_data
 
-# Load kr-1m
-fetch_minute_path = os.path.join(src_path, 'kr-1m', 'fetch.py')
+# Load fetch_kr1m
+fetch_minute_path = os.path.join(src_path, 'fetch_kr1m.py')
 min_spec = importlib.util.spec_from_file_location("kr_1m_fetch", fetch_minute_path)
 kr_1m_fetch = importlib.util.module_from_spec(min_spec)
 min_spec.loader.exec_module(kr_1m_fetch)

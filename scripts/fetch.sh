@@ -46,7 +46,7 @@ echo ""
 
 # Step 1: Fetch KR symbols
 echo "[1/3] Fetching KR symbols..."
-python "$SRC_DIR/symbol_kr.py" || {
+python3 "$SRC_DIR/symbol_kr.py" || {
     echo "[ERROR] Failed to fetch symbols"
     exit 1
 }
@@ -54,7 +54,7 @@ echo ""
 
 # Step 2: Fetch KR day data
 echo "[2/3] Fetching KR daily data..."
-python "$SRC_DIR/fetch_kr1d.py" -d "$DATE" -c "$CONCURRENCY" || {
+python3 "$SRC_DIR/fetch_kr1d.py" -d "$DATE" -c "$CONCURRENCY" || {
     echo "[ERROR] Failed to fetch KR daily data"
     exit 1
 }
@@ -62,7 +62,7 @@ echo ""
 
 # Step 3: Fetch KR 1-minute data
 echo "[3/3] Fetching KR 1-minute data..."
-python "$SRC_DIR/fetch_kr1m.py" -d "$DATE" -c "$CONCURRENCY" || {
+python3 "$SRC_DIR/fetch_kr1m.py" -d "$DATE" -c "$CONCURRENCY" || {
     echo "[ERROR] Failed to fetch KR 1-minute data"
     exit 1
 }
