@@ -195,7 +195,7 @@ async def collect_minute_data(date_str, symbols, concurrency, output_file):
         out_path.parent.mkdir(parents=True, exist_ok=True)
         
         # Save as Parquet
-        df.to_parquet(output_file, compression='snappy', index=False)
+        df.to_parquet(output_file, compression='zstd', index=False)
         print(f'[INFO] Saved {len(df)} records to {output_file}', file=sys.stderr)
     
     print(f'[INFO] Minute data collection finished for {date_str}', file=sys.stderr)

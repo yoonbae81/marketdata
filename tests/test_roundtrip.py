@@ -43,7 +43,7 @@ class TestKRDayRoundtrip(unittest.TestCase):
         })
         
         # Save to Parquet
-        df.to_parquet(parquet_file, compression='snappy', index=False)
+        df.to_parquet(parquet_file, compression='zstd', index=False)
         
         # Extract the data
         result_df = extract.extract_kr_day('005930', test_date, test_date, 
@@ -95,7 +95,7 @@ class TestKR1minRoundtrip(unittest.TestCase):
         })
         
         # Save to Parquet
-        df.to_parquet(parquet_file, compression='snappy', index=False)
+        df.to_parquet(parquet_file, compression='zstd', index=False)
         
         # Extract the data
         result_df = extract.extract_kr_1min('005930', '2026-01-15 09:00:00', '2026-01-15 09:02:00',
@@ -148,7 +148,7 @@ class TestUS5minRoundtrip(unittest.TestCase):
         })
         
         # Save to Parquet
-        df.to_parquet(parquet_file, compression='snappy', index=False)
+        df.to_parquet(parquet_file, compression='zstd', index=False)
         
         # Extract the data
         result_df = extract.extract_us_5min('AAPL', '2025-12-15 09:30:00', '2025-12-15 09:40:00',

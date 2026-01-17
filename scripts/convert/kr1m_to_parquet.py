@@ -43,6 +43,9 @@ def validate_parquet(txt_file, parquet_file):
         txt_df['dt'] = pd.to_datetime(date_str + ' ' + txt_df['time'])
         txt_df = txt_df[['symbol', 'dt', 'price', 'volume']]
         
+        # Deduplicate to match conversion logic
+        txt_df = txt_df.drop_duplicates()
+        
         parquet_df = pd.read_parquet(parquet_file)
         
         # Check row count
@@ -106,8 +109,14 @@ def convert_file(txt_file):
     df['dt'] = pd.to_datetime(date_str + ' ' + df['time'])
     df = df[['symbol', 'dt', 'price', 'volume']]
     
+    # Drop exact duplicates if any
+    original_len = len(df)
+    df = df.drop_duplicates()
+    if len(df) < original_len:
+        print(f"[INFO] Dropped {original_len - len(df)} duplicate rows from {txt_path.name}")
+    
     # Save to Parquet
-    df.to_parquet(output_file, compression='snappy', index=False)
+    df.to_parquet(output_file, compression='zstd', index=False)
     print(f"[OK] {txt_path.name} -> {output_file.name} ({len(df)} records)")
     return True
 
@@ -115,8 +124,16 @@ def convert_file(txt_file):
 def convert_directory(directory):
     """Convert all text files in a directory tree"""
     directory = Path(directory)
+    import re
     
     txt_files = sorted(directory.rglob("*.txt"))
+    # Exclude files in hidden directories (like .venv)
+    txt_files = [f for f in txt_files if not any(part.startswith('.') for part in f.parts)]
+    
+    # Filter for YYYY-MM-DD.txt pattern
+    date_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+    txt_files = [f for f in txt_files if date_pattern.match(f.stem)]
+    
     if not txt_files:
         print(f"[WARN] No .txt files found in {directory}")
         return
@@ -135,8 +152,8 @@ if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description='Convert KR 1-minute text files to Parquet')
-    parser.add_argument('directory', nargs='?', default='.', 
-                       help='Directory containing text files to convert (default: current directory)')
+    parser.add_argument('directory', nargs='?', default='data/KR-1m', 
+                       help='Directory containing text files to convert (default: data/KR-1m)')
     
     args = parser.parse_args()
     

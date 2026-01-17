@@ -131,7 +131,7 @@ async def collect_day_data(date, symbols, concurrency, output_file=None):
         
         out_path = Path(output_file)
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        df.to_parquet(output_file, compression='snappy', index=False)
+        df.to_parquet(output_file, compression='zstd', index=False)
         print(f'[INFO] Saved {len(df)} records to {output_file}', file=sys.stderr)
         return []
     

@@ -182,5 +182,5 @@ if __name__ == '__main__':
             } for r in day_records])
             
             # Save as Parquet
-            df.to_parquet(file_path, compression='snappy', index=False)
+            df.to_parquet(file_path, compression='zstd', index=False)
             print(f'Saved {len(df)} records to {filename}')
