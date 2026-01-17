@@ -36,15 +36,15 @@ class TestParseMinuteRows(unittest.TestCase):
     def test_parse_minute_rows_success(self):
         """Test successful parsing of minute data"""
         html = """
-        <html>
-            <span class="tah">09:00</span>
-            <span class="tah">70,000</span>
-            <span class="tah">+1,000</span>
-            <span class="tah">69,000</span>
-            <span class="tah">71,000</span>
-            <span class="tah">68,500</span>
-            <span class="tah">1,000</span>
-        </html>
+        <table class="type2">
+            <tr>
+                <td><span class="tah">09:00</span></td>
+                <td><span class="tah">70,000</span></td>
+                <td></td><td></td><td></td>
+                <td><span class="tah">99,000</span></td>
+                <td><span class="tah">1,000</span></td>
+            </tr>
+        </table>
         """
         bs = BeautifulSoup(html, 'lxml')
         
@@ -102,11 +102,12 @@ class TestParseMinuteRows(unittest.TestCase):
     def test_parse_minute_rows_incomplete(self):
         """Test parsing with incomplete row"""
         html = """
-        <html>
-            <span class="tah">09:00</span>
-            <span class="tah">70,000</span>
-            <span class="tah">+1,000</span>
-        </html>
+        <table class="type2">
+            <tr>
+                <td><span class="tah">09:00</span></td>
+                <td><span class="tah">70,000</span></td>
+            </tr>
+        </table>
         """
         bs = BeautifulSoup(html, 'lxml')
         
@@ -121,15 +122,15 @@ class TestFetchMinutePage(unittest.IsolatedAsyncioTestCase):
     async def test_fetch_minute_page_success(self):
         """Test successful fetch of a minute data page"""
         html = """
-        <html>
-            <span class="tah">09:00</span>
-            <span class="tah">70,000</span>
-            <span class="tah">+1,000</span>
-            <span class="tah">69,000</span>
-            <span class="tah">71,000</span>
-            <span class="tah">68,500</span>
-            <span class="tah">1,000</span>
-        </html>
+        <table class="type2">
+            <tr>
+                <td><span class="tah">09:00</span></td>
+                <td><span class="tah">70,000</span></td>
+                <td></td><td></td><td></td>
+                <td><span class="tah">99,000</span></td>
+                <td><span class="tah">1,000</span></td>
+            </tr>
+        </table>
         """
         
         mock_response = AsyncMock()
@@ -180,15 +181,15 @@ class TestFetchMinuteSymbol(unittest.IsolatedAsyncioTestCase):
     async def test_fetch_minute_symbol_single_page(self):
         """Test fetch with single page of data"""
         html = """
-        <html>
-            <span class="tah">09:00</span>
-            <span class="tah">70,000</span>
-            <span class="tah">+1,000</span>
-            <span class="tah">69,000</span>
-            <span class="tah">71,000</span>
-            <span class="tah">68,500</span>
-            <span class="tah">1,000</span>
-        </html>
+        <table class="type2">
+            <tr>
+                <td><span class="tah">09:00</span></td>
+                <td><span class="tah">70,000</span></td>
+                <td></td><td></td><td></td>
+                <td><span class="tah">99,000</span></td>
+                <td><span class="tah">1,000</span></td>
+            </tr>
+        </table>
         """
         
         mock_response = AsyncMock()
@@ -353,14 +354,11 @@ class TestCollectMinuteData(unittest.IsolatedAsyncioTestCase):
             ]
             
             m = mock_open()
-            with patch('builtins.open', m):
-                with patch('pathlib.Path.mkdir'):
-                    symbols = ['005930', '000660']
-                    result = await collect_minute_data('2023-12-20', symbols, 20,
-                                                       output_file='/tmp/minute.tsv')
+            with patch('pathlib.Path.mkdir'):
+                symbols = ['005930', '000660']
+                result = await collect_minute_data('2023-12-20', symbols, 20)
             
             self.assertEqual(len(result), 2)
-            m.assert_called_once()
     
     async def test_collect_minute_data_sorting(self):
         """Test that results are sorted by time"""
@@ -370,18 +368,14 @@ class TestCollectMinuteData(unittest.IsolatedAsyncioTestCase):
             ]
             
             m = mock_open()
-            with patch('builtins.open', m):
-                with patch('pathlib.Path.mkdir'):
-                    symbols = ['005930']
-                    result = await collect_minute_data('2023-12-20', symbols, 20,
-                                                       output_file='/tmp/minute.tsv')
+            with patch('pathlib.Path.mkdir'):
+                symbols = ['005930']
+                result = await collect_minute_data('2023-12-20', symbols, 20)
             
-            # Check that write was called with sorted data
-            handle = m()
-            written_lines = [call[0][0] for call in handle.write.call_args_list]
-            
-            # First line should be 09:00, second should be 09:01
-            self.assertTrue(any('09:00' in line for line in written_lines))
+            # Check results
+            self.assertEqual(len(result), 2)
+            self.assertTrue(any('09:00' in line for line in result))
+            self.assertTrue(any('09:01' in line for line in result))
 
 
 class TestMainAsync(unittest.IsolatedAsyncioTestCase):

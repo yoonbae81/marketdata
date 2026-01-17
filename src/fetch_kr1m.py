@@ -54,7 +54,7 @@ def parse_minute_rows(symbol, bs):
         clean_time = time_match.group(1)
             
         price = tds[1].text.strip().replace(',', '')
-        volume = tds[5].text.strip().replace(',', '')
+        volume = tds[6].text.strip().replace(',', '')
         
         # Result format: [symbol, price, volume, time]
         result.append([symbol, price, volume, clean_time])
@@ -142,7 +142,7 @@ async def fetch_minute_symbol(session, symbol, date_str, semaphore):
 
 
 
-async def collect_minute_data(date_str, symbols, concurrency, output_file):
+async def collect_minute_data(date_str, symbols, concurrency):
     """Memory-safe collection of minute data using worker-queue pattern"""
     print(f'[INFO] Collecting minute data for {date_str}...', file=sys.stderr)
     

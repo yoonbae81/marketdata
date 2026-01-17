@@ -79,110 +79,39 @@ scripts\setup-dev.bat
 
 ---
 
-## 📊 사용법
+## 🧪 테스트 실행
 
-### 데이터 수집
+본 프로젝트는 총 **55개의 테스트 케이스**를 포함하고 있습니다.
 
-**전체 수집 (심볼 + 일별 + 1분):**
+*   **전체 테스트 실행**: `python -m unittest discover tests -v`
+*   **단위 테스트 (Mock)**: `python -m unittest tests.test_symbol tests.test_day tests.test_minute -v`
+*   **통합 테스트 (Real API)**: `python -m unittest tests.test_integration -v`
+
+---
+
+## 🐳 Docker & 배포
+
+이 프로젝트는 Docker 컨테이너와 호스트의 **systemd timer**를 연동하여 자동 수집 환경을 구축합니다.
+
+### 1. 배포 및 시스템 자동화 설정 (Linux)
+제공된 배포 스크립트를 통해 소스 코드 복사, Docker 빌드, 서비스/타이머 등록이 한 번에 진행됩니다.
 ```bash
-bash scripts/fetch.sh -d 2026-01-17
+sudo ./scripts/deploy.sh
 ```
+*   **스케줄**: 매 평일(월-금) 17:00에 자동 실행
+*   **동작**: 컨테이너 실행 후 수집 태스크가 완료되면 즉시 종료 (`--rm`)
 
-**개별 수집:**
+### 2. 수동 실행
 ```bash
-# 한국 일별 데이터
-python src/fetch_kr1d.py -d 2026-01-17
-
-# 한국 1분 데이터
-python src/fetch_kr1m.py -d 2026-01-17 -c 20
-
-# 종목 리스트
-python src/symbol_kr.py
-```
-
-### 데이터 추출
-
-**CLI 사용:**
-```bash
-# 한국 1분 데이터
-python src/extract.py min 005930 2021-06-01 2021-06-30
-
-# 한국 일별 데이터
-python src/extract.py day 005930 2021-01-01 2021-12-31
-
-# 미국 5분 데이터
-python src/extract.py min AAPL 2021-12-01 2021-12-31
-```
-
-**Python 모듈로 사용:**
-```python
-from src.extract import extract_kr_1min, extract_kr_day
-
-# 삼성전자 1분 데이터
-df = extract_kr_1min('005930', '2021-06-01 09:00:00', '2021-06-30 15:30:00')
-
-# 삼성전자 일별 데이터
-df = extract_kr_day('005930', '2021-01-01', '2021-12-31')
+docker compose run --rm app
 ```
 
 ---
 
-## 🚀 프로덕션 배포
+## 💾 데이터 관리
 
-### Systemd 타이머로 자동 수집
-
-```bash
-sudo bash scripts/install-systemd-timer.sh
-```
-
-**타이머 설정:**
-*   평일(월~금) 오후 5시 자동 실행
-*   현재 레포지토리에서 직접 실행
-*   데이터는 `data/` 폴더에 저장
-
-**관리 명령:**
-```bash
-# 타이머 상태 확인
-systemctl status marketdata-fetch.timer
-
-# 마지막 실행 확인
-systemctl status marketdata-fetch.service
-
-# 로그 확인
-journalctl -u marketdata-fetch.service
-```
-
----
-
-## 🧪 테스트
-
-```bash
-# 전체 테스트
-python -m unittest discover tests -v
-
-# Round-trip 테스트
-python -m unittest tests.test_roundtrip -v
-```
-
----
-
-## 📈 성능
-
-| 항목 | 텍스트 + zstd | Parquet |
-|------|---------------|---------|
-| 파일 크기 | 4.5MB | 2-3MB |
-| 압축률 | 28% | 80-85% |
-| 쿼리 속도 | 느림 (전체 스캔) | 빠름 (컬럼 기반) |
-| 타입 안정성 | 없음 | 있음 |
-
----
-
-## 📝 라이선스
-
-MIT License
-
----
-
-## ⚠️ 면책 조항
-
-본 소프트웨어는 "있는 그대로" 제공되며, 명시적이든 묵시적이든 어떠한 종류의 보증도 제공하지 않습니다. 저자 또는 저작권 보유자는 본 소프트웨어 사용으로 인해 발생하는 어떠한 청구, 손해 또는 기타 책임에 대해서도 책임을 지지 않습니다.
+*   **저장 경로**: 호스트의 `/srv/krx-price` 경로에 데이터가 저장됩니다.
+*   **디렉토리 구조**:
+    *   `/srv/krx-price/day`: 일별 데이터
+    *   `/srv/krx-price/minute`: 분 단위 데이터
+*   **볼륨 설정**: `docker-compose.yml`을 통해 호스트 경로와 컨테이너 내부 경로가 동기화됩니다.
