@@ -2,21 +2,32 @@
 """
 Convert existing KR 1-minute text files to Parquet format.
 One-time conversion script for migrating historical data.
-
-Required packages:
-    pip install pandas pyarrow numpy
-
-Usage:
-    python kr1m_to_parquet.py <directory>
-    
-Example:
-    python kr1m_to_parquet.py data/KR-1m/
 """
 
 import sys
 from pathlib import Path
-import pandas as pd
-import numpy as np
+
+# Check required dependencies
+try:
+    import pandas as pd
+except ImportError:
+    print("[ERROR] Required package 'pandas' is not installed.", file=sys.stderr)
+    print("Please install it with: pip install pandas", file=sys.stderr)
+    sys.exit(1)
+
+try:
+    import pyarrow
+except ImportError:
+    print("[ERROR] Required package 'pyarrow' is not installed.", file=sys.stderr)
+    print("Please install it with: pip install pyarrow", file=sys.stderr)
+    sys.exit(1)
+
+try:
+    import numpy as np
+except ImportError:
+    print("[ERROR] Required package 'numpy' is not installed.", file=sys.stderr)
+    print("Please install it with: pip install numpy", file=sys.stderr)
+    sys.exit(1)
 
 
 def validate_parquet(txt_file, parquet_file):
@@ -124,7 +135,8 @@ if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description='Convert KR 1-minute text files to Parquet')
-    parser.add_argument('directory', help='Directory containing text files to convert')
+    parser.add_argument('directory', nargs='?', default='.', 
+                       help='Directory containing text files to convert (default: current directory)')
     
     args = parser.parse_args()
     

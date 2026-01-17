@@ -2,12 +2,41 @@
 """
 Convert existing US 5-minute text files to Parquet format.
 One-time conversion script for migrating historical data.
+
+Required packages:
+    pip install pandas pyarrow numpy
+
+Usage:
+    python us5m_to_parquet.py <directory>
+    
+Example:
+    python us5m_to_parquet.py data/US-5m/
 """
 
 import sys
 from pathlib import Path
-import pandas as pd
-import numpy as np
+
+# Check required dependencies
+try:
+    import pandas as pd
+except ImportError:
+    print("[ERROR] Required package 'pandas' is not installed.", file=sys.stderr)
+    print("Please install it with: pip install pandas", file=sys.stderr)
+    sys.exit(1)
+
+try:
+    import pyarrow
+except ImportError:
+    print("[ERROR] Required package 'pyarrow' is not installed.", file=sys.stderr)
+    print("Please install it with: pip install pyarrow", file=sys.stderr)
+    sys.exit(1)
+
+try:
+    import numpy as np
+except ImportError:
+    print("[ERROR] Required package 'numpy' is not installed.", file=sys.stderr)
+    print("Please install it with: pip install numpy", file=sys.stderr)
+    sys.exit(1)
 
 
 def validate_parquet(txt_file, parquet_file):
@@ -16,7 +45,10 @@ def validate_parquet(txt_file, parquet_file):
         # Read both files
         txt_df = pd.read_csv(txt_file, sep='\t', header=None,
                             names=['symbol', 'price', 'volume', 'time'],
-                            dtype={'symbol': str, 'price': float, 'volume': int, 'time': str})
+                            dtype={'symbol': str, 'price': float, 'volume': float, 'time': str})
+        
+        # Round volume to integer (same as conversion)
+        txt_df['volume'] = txt_df['volume'].round().astype(int)
         
         # Parse date from filename
         date_str = txt_file.stem
@@ -76,10 +108,13 @@ def convert_file(txt_file):
     try:
         df = pd.read_csv(txt_path, sep='\t', header=None,
                          names=['symbol', 'price', 'volume', 'time'],
-                         dtype={'symbol': str, 'price': float, 'volume': int, 'time': str})
+                         dtype={'symbol': str, 'price': float, 'volume': float, 'time': str})
     except Exception as e:
         print(f"[ERROR] Failed to read {txt_file}: {e}")
         return False
+    
+    # Round volume to integer (handle fractional shares)
+    df['volume'] = df['volume'].round().astype(int)
     
     # Create datetime column
     df['dt'] = pd.to_datetime(date_str + ' ' + df['time'])
@@ -114,7 +149,8 @@ if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description='Convert US 5-minute text files to Parquet')
-    parser.add_argument('directory', help='Directory containing text files to convert')
+    parser.add_argument('directory', nargs='?', default='.',
+                       help='Directory containing text files to convert (default: current directory)')
     
     args = parser.parse_args()
     

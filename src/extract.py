@@ -9,7 +9,21 @@ import argparse
 import sys
 from pathlib import Path
 from datetime import datetime, timedelta
-import pandas as pd
+
+# Check required dependencies
+try:
+    import pandas as pd
+except ImportError:
+    print("[ERROR] Required package 'pandas' is not installed.", file=sys.stderr)
+    print("Please install it with: pip install pandas", file=sys.stderr)
+    sys.exit(1)
+
+try:
+    import pyarrow
+except ImportError:
+    print("[ERROR] Required package 'pyarrow' is not installed.", file=sys.stderr)
+    print("Please install it with: pip install pyarrow", file=sys.stderr)
+    sys.exit(1)
 
 
 def extract_kr_1min(symbol, start_date, end_date, data_dir=None):
