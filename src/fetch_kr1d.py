@@ -67,7 +67,7 @@ async def fetch_day_symbol(session, symbol, date, semaphore):
                     text = content.decode('euc-kr')
                 except:
                     text = content.decode('utf-8', errors='ignore')
-                bs = BeautifulSoup(text, 'lxml')
+                bs = BeautifulSoup(text, 'html.parser')
 
                 for row in parse_day_data(bs):
                     if row['date'] == date and row['open'] != '0':
@@ -82,12 +82,16 @@ async def fetch_day_symbol(session, symbol, date, semaphore):
 
 
 async def collect_day_data(date, symbols, concurrency, output_file=None):
-    """Memory-safe collection of daily data"""
+    """Memory-efficient collection of daily data with batch processing"""
     total_symbols = len(symbols)
     print(f'[INFO] Collecting day data for {date}...', file=sys.stderr)
     print(f'[INFO] Total symbols to process: {total_symbols}', file=sys.stderr)
     
-    all_data = []
+    # Use batched processing to reduce memory footprint
+    BATCH_SIZE = 100
+    all_batches = []
+    current_batch = []
+    
     queue = asyncio.Queue()
     for s in symbols:
         queue.put_nowait(s)
@@ -99,7 +103,7 @@ async def collect_day_data(date, symbols, concurrency, output_file=None):
     success_count = 0
     
     async def worker():
-        nonlocal processed_count, success_count
+        nonlocal processed_count, success_count, current_batch
         while True:
             symbol = await queue.get()
             try:
@@ -109,7 +113,7 @@ async def collect_day_data(date, symbols, concurrency, output_file=None):
                     if res:
                         parts = res.split('\t')
                         if len(parts) >= 6:
-                            all_data.append({
+                            current_batch.append({
                                 'symbol': parts[0],
                                 'open': int(parts[1]),
                                 'high': int(parts[2]),
@@ -118,6 +122,12 @@ async def collect_day_data(date, symbols, concurrency, output_file=None):
                                 'volume': int(parts[5])
                             })
                             success_count += 1
+                            
+                            # Move batch to all_batches when it reaches BATCH_SIZE
+                            if len(current_batch) >= BATCH_SIZE:
+                                all_batches.append(current_batch)
+                                current_batch = []
+                    
                     # Log progress every 100 symbols
                     if processed_count % 100 == 0:
                         progress_pct = (processed_count / total_symbols) * 100
@@ -135,23 +145,34 @@ async def collect_day_data(date, symbols, concurrency, output_file=None):
         for w in workers:
             w.cancel()
     
+    # Add remaining batch
+    if current_batch:
+        all_batches.append(current_batch)
+    
     print(f'[INFO] Completed processing {processed_count}/{total_symbols} symbols - {success_count} records collected', file=sys.stderr)
     
     # Save as Parquet if output_file provided
-    if output_file and all_data:
+    if all_batches:
         import pandas as pd
+        
+        # Concatenate all batches into single DataFrame
+        all_data = [item for batch in all_batches for item in batch]
         df = pd.DataFrame(all_data)
         df['date'] = pd.to_datetime(date)
         df = df[['symbol', 'date', 'open', 'high', 'low', 'close', 'volume']]
         
-        out_path = Path(output_file)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        df.to_parquet(output_file, compression='zstd', index=False)
-        print(f'[INFO] Saved {len(df)} records to {output_file}', file=sys.stderr)
-        return []
+        if output_file:
+            out_path = Path(output_file)
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            df.to_parquet(output_file, compression='zstd', index=False, engine='pyarrow')
+            print(f'[INFO] Saved {len(df)} records to {output_file}', file=sys.stderr)
+            return []
+        
+        # Return data for non-file mode - optimized to avoid iterrows
+        return [f"{d['symbol']}\t{d['open']}\t{d['high']}\t{d['low']}\t{d['close']}\t{d['volume']}" 
+                for d in all_data]
     
-    # Return data for non-file mode
-    return ['\t'.join([str(d['symbol']), str(d['open']), str(d['high']), str(d['low']), str(d['close']), str(d['volume'])]) for d in all_data]
+    return []
 
 
 async def main_async(date, symbols, concurrency):

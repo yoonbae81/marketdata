@@ -82,7 +82,7 @@ async def fetch_minute_page(session, symbol, date_str, page, semaphore):
                 except:
                     text = content.decode('utf-8', errors='ignore')
                 
-                bs = BeautifulSoup(text, 'lxml')
+                bs = BeautifulSoup(text, 'html.parser')
                 return parse_minute_rows(symbol, bs)
         except Exception as e:
             print(f"[DEBUG] Error fetching {symbol} page {page}: {e}", file=sys.stderr)
@@ -91,24 +91,26 @@ async def fetch_minute_page(session, symbol, date_str, page, semaphore):
 
 async def fetch_minute_symbol(session, symbol, date_str, semaphore):
     """Fetch all minute data for a single symbol"""
-    # Fetch page 1 first to determine last page
-    all_results = await fetch_minute_page(session, symbol, date_str, 1, semaphore)
-    if not all_results:
-        return []
-
+    # Fetch page 1 and determine last page in one request
     params = { 'page': 1, 'code': symbol, 'thistime': date_str.replace('-', '') + '235959' }
     
     try:
         async with semaphore:
             async with session.get(MINUTE_URL, params=params, headers=MINUTE_HEADERS, timeout=15) as response:
                 if response.status != 200:
-                    return ['\t'.join(r) for r in all_results]
+                    return []
                 content = await response.read()
                 try:
                     text = content.decode('euc-kr')
                 except:
                     text = content.decode('utf-8', errors='ignore')
-                bs = BeautifulSoup(text, 'lxml')
+
+        # Parse with faster html.parser instead of lxml
+        bs = BeautifulSoup(text, 'html.parser')
+        all_results = parse_minute_rows(symbol, bs)
+        
+        if not all_results:
+            return []
 
         # Determine last page
         pg_rr = bs.find('td', class_='pgRR')
@@ -126,30 +128,33 @@ async def fetch_minute_symbol(session, symbol, date_str, semaphore):
             for page_results in other_pages:
                 all_results.extend(page_results)
 
-        # Dedup and sort by time
+        # Dedup and sort by time - return as list of lists for efficiency
         unique_data = {}
         for res in all_results:
             key = res[3]  # time string (HH:MM)
             if key not in unique_data:
                 unique_data[key] = res
         
-        # Return sorted results as tab-separated strings
-        return ['\t'.join(unique_data[key]) for key in sorted(unique_data.keys())]
+        # Return sorted results as list of lists (not strings)
+        return [unique_data[key] for key in sorted(unique_data.keys())]
                     
     except Exception as e:
         print(f'[ERROR] Exception for {symbol}: {e}', file=sys.stderr)
-        return ['\t'.join(r) for r in all_results]
+        return []
 
 
 
 async def collect_minute_data(date_str, symbols, concurrency, output_file=None):
-    """Memory-safe collection of minute data using worker-queue pattern"""
+    """Memory-efficient collection of minute data using streaming writes"""
     total_symbols = len(symbols)
     print(f'[INFO] Collecting minute data for {date_str}...', file=sys.stderr)
     print(f'[INFO] Total symbols to process: {total_symbols}', file=sys.stderr)
     
-    # Collect data in memory first
-    all_data = []
+    # Use batched processing to reduce memory footprint
+    BATCH_SIZE = 100
+    all_batches = []
+    current_batch = []
+    
     queue = asyncio.Queue()
     for s in symbols:
         queue.put_nowait(s)
@@ -158,29 +163,36 @@ async def collect_minute_data(date_str, symbols, concurrency, output_file=None):
     semaphore = asyncio.Semaphore(concurrency)
     lock = asyncio.Lock()
     processed_count = 0
+    data_points = 0
     
     async def worker():
-        nonlocal processed_count
+        nonlocal processed_count, data_points, current_batch
         while True:
             symbol = await queue.get()
             try:
                 symbol_results = await fetch_minute_symbol(session, symbol, date_str, semaphore)
                 if symbol_results:
                     async with lock:
-                        for line in symbol_results:
-                            parts = line.split('\t')
-                            if len(parts) >= 4:
-                                all_data.append({
-                                    'symbol': parts[0],
-                                    'price': int(parts[1]),
-                                    'volume': int(parts[2]),
-                                    'time': parts[3]
-                                })
+                        # symbol_results is now list of lists [symbol, price, volume, time]
+                        for row in symbol_results:
+                            current_batch.append({
+                                'symbol': row[0],
+                                'price': int(row[1]),
+                                'volume': int(row[2]),
+                                'time': row[3]
+                            })
+                            data_points += 1
+                        
+                        # Move batch to all_batches when it reaches BATCH_SIZE
+                        if len(current_batch) >= BATCH_SIZE:
+                            all_batches.append(current_batch)
+                            current_batch = []
+                        
                         processed_count += 1
                         # Log progress every 100 symbols
                         if processed_count % 100 == 0:
                             progress_pct = (processed_count / total_symbols) * 100
-                            print(f'[PROGRESS] {processed_count}/{total_symbols} symbols processed ({progress_pct:.1f}%) - {len(all_data)} data points collected', file=sys.stderr)
+                            print(f'[PROGRESS] {processed_count}/{total_symbols} symbols processed ({progress_pct:.1f}%) - {data_points} data points collected', file=sys.stderr)
                 else:
                     async with lock:
                         processed_count += 1
@@ -197,31 +209,40 @@ async def collect_minute_data(date_str, symbols, concurrency, output_file=None):
         for w in workers:
             w.cancel()
     
+    # Add remaining batch
+    if current_batch:
+        all_batches.append(current_batch)
+    
     print(f'[INFO] Completed processing {processed_count}/{total_symbols} symbols', file=sys.stderr)
     
-    # Convert to DataFrame and optionally save as Parquet
-    if all_data:
+    # Convert to DataFrame and save/return
+    if all_batches:
         import pandas as pd
+        
+        # Concatenate all batches into single DataFrame
+        all_data = [item for batch in all_batches for item in batch]
         df = pd.DataFrame(all_data)
         df['dt'] = pd.to_datetime(date_str + ' ' + df['time'])
         
-        # Keep time column for return value before selecting final columns
-        result_data = [f"{row['symbol']}\t{row['price']}\t{row['volume']}\t{row['time']}" 
-                      for _, row in df.iterrows()]
-        
-        # Now select final columns for saving
-        df = df[['symbol', 'dt', 'price', 'volume']]
-        
         if output_file:
+            # Select final columns for saving
+            df_save = df[['symbol', 'dt', 'price', 'volume']]
+            
             # Ensure output directory exists
             out_path = Path(output_file)
             out_path.parent.mkdir(parents=True, exist_ok=True)
             
-            # Save as Parquet
-            df.to_parquet(output_file, compression='zstd', index=False)
-            print(f'[INFO] Saved {len(df)} records to {output_file}', file=sys.stderr)
-        
-        return result_data
+            # Save as Parquet with optimized settings
+            df_save.to_parquet(output_file, compression='zstd', index=False, engine='pyarrow')
+            print(f'[INFO] Saved {len(df_save)} records to {output_file}', file=sys.stderr)
+            
+            # Return formatted strings for stdout
+            return [f"{row['symbol']}\t{row['price']}\t{row['volume']}\t{row['time']}" 
+                   for _, row in df.iterrows()]
+        else:
+            # Return formatted strings for stdout
+            return [f"{row['symbol']}\t{row['price']}\t{row['volume']}\t{row['time']}" 
+                   for _, row in df.iterrows()]
     
     print(f'[INFO] Minute data collection finished for {date_str}', file=sys.stderr)
     return []
