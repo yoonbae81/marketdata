@@ -8,6 +8,14 @@ set -e  # Exit on error
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 SRC_DIR="$PROJECT_ROOT/src"
+VENV_PYTHON="$PROJECT_ROOT/.venv/bin/python"
+
+# Check if venv exists
+if [ ! -f "$VENV_PYTHON" ]; then
+    echo "[ERROR] Virtual environment not found at $VENV_PYTHON"
+    echo "Please run: python3 -m venv .venv && .venv/bin/pip install -r requirements.txt"
+    exit 1
+fi
 
 # Default values
 DATE=$(date +%Y-%m-%d)
@@ -46,7 +54,7 @@ echo ""
 
 # Step 1: Fetch KR symbols
 echo "[1/3] Fetching KR symbols..."
-python3 "$SRC_DIR/symbol_kr.py" || {
+"$VENV_PYTHON" "$SRC_DIR/symbol_kr.py" || {
     echo "[ERROR] Failed to fetch symbols"
     exit 1
 }
@@ -54,7 +62,7 @@ echo ""
 
 # Step 2: Fetch KR day data
 echo "[2/3] Fetching KR daily data..."
-python3 "$SRC_DIR/fetch_kr1d.py" -d "$DATE" -c "$CONCURRENCY" || {
+"$VENV_PYTHON" "$SRC_DIR/fetch_kr1d.py" -d "$DATE" -c "$CONCURRENCY" || {
     echo "[ERROR] Failed to fetch KR daily data"
     exit 1
 }
@@ -62,7 +70,7 @@ echo ""
 
 # Step 3: Fetch KR 1-minute data
 echo "[3/3] Fetching KR 1-minute data..."
-python3 "$SRC_DIR/fetch_kr1m.py" -d "$DATE" -c "$CONCURRENCY" || {
+"$VENV_PYTHON" "$SRC_DIR/fetch_kr1m.py" -d "$DATE" -c "$CONCURRENCY" || {
     echo "[ERROR] Failed to fetch KR 1-minute data"
     exit 1
 }
