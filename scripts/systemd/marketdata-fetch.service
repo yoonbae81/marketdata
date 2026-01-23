@@ -6,7 +6,7 @@ After=network.target
 Type=oneshot
 WorkingDirectory={{PROJECT_ROOT}}
 # Run the fetch script using bash
-ExecStart=/bin/bash {{PROJECT_ROOT}}/scripts/fetch.sh
+ExecStart=/bin/bash {{PROJECT_ROOT}}/src/run.sh
 
 [Install]
 WantedBy=default.target

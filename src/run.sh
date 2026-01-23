@@ -7,7 +7,7 @@ set -e  # Exit on error
 # Get script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-SRC_DIR="$PROJECT_ROOT/src"
+SRC_DIR="$SCRIPT_DIR"
 VENV_PYTHON="$PROJECT_ROOT/.venv/bin/python"
 
 # Check if venv exists

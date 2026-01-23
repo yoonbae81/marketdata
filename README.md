@@ -47,15 +47,15 @@ marketdata/
 │   ├── KR-1d/YYYY/         # 한국 일별 데이터 (일별 → 월별 → 연별)
 │   └── US-5m/YYYY/         # 미국 5분 데이터 (일별 → 월별 → 연별)
 ├── src/                    # 📦 핵심 로직
+│   ├── run.sh              # 데이터 수집 오케스트레이터
 │   ├── fetch_kr1m.py       # 한국 1분 데이터 수집
 │   ├── fetch_kr1d.py       # 한국 일별 데이터 수집
 │   ├── fetch_us5m.py       # 미국 5분 데이터 처리
 │   ├── symbol_kr.py        # 종목 리스트 관리
 │   └── extract.py          # 통합 데이터 추출 (CLI/모듈)
 ├── scripts/                # 🛠️ 유틸리티
-│   ├── fetch.sh            # 데이터 수집 오케스트레이터
 │   ├── setup-dev.sh/bat    # 개발 환경 설정
-│   ├── install-systemd-timer.sh  # 프로덕션 배포
+│   ├── install-systemd.sh  # 프로덕션 배포
 │   ├── merge-monthly/      # 월별 병합 스크립트
 │   │   ├── merge_kr1d.py   # 일별 → 월별 병합 (KR Day)
 │   │   ├── merge_kr1m.py   # 일별 → 월별 병합 (KR 1m)
@@ -101,10 +101,10 @@ scripts\setup-dev.bat
 source .venv/bin/activate
 
 # 특정 날짜 데이터 수집
-bash scripts/fetch.sh -d 2026-01-17
+bash src/run.sh -d 2026-01-17
 
 # 오늘 데이터 수집 (기본값)
-bash scripts/fetch.sh
+bash src/run.sh
 ```
 
 ### 2. 데이터 병합
@@ -162,20 +162,20 @@ python scripts/merge-yearly/merge_us5m.py
 
 ```bash
 # 배포 스크립트 실행 (서비스 및 타이머 설치)
-sudo ./scripts/install-systemd-timer.sh
+sudo ./scripts/install-systemd.sh
 ```
 
 *   **스케줄**: 매 평일(월-금) 17:00에 자동 실행
 *   **동작**: 데이터 수집 후 자동 종료
-*   **로그**: `journalctl -u krx-price.service -f`로 확인
+*   **로그**: `journalctl --user -u marketdata-fetch.service -f`로 확인
 
 ### 수동 실행
 ```bash
 # 서비스 즉시 실행
-sudo systemctl start krx-price.service
+systemctl --user start marketdata-fetch.service
 
 # 서비스 상태 확인
-sudo systemctl status krx-price.service
+systemctl --user status marketdata-fetch.service
 ```
 
 ---
