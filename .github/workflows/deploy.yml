@@ -1,4 +1,4 @@
-name: Deploy KRX Price Collection
+name: Deploy Marketdata
 
 on:
   push:
@@ -19,10 +19,8 @@ jobs:
           port: ${{ secrets.SSH_PORT || 22 }}
           script: |
             # Navigate to the repository directory
-            cd ~/krx-price || exit 1
+            cd ~/marketdata || exit 1
             
             echo "📥 Pulling latest changes..."
             git pull origin master
             
-            echo "🚀 Running deployment script..."
-            bash scripts/deploy.sh
