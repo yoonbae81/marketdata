@@ -236,9 +236,8 @@ async def collect_minute_data(date_str, symbols, concurrency, output_file=None):
             df_save.to_parquet(output_file, compression='zstd', index=False, engine='pyarrow')
             print(f'[INFO] Saved {len(df_save)} records to {output_file}', file=sys.stderr)
             
-            # Return formatted strings for stdout
-            return [f"{row['symbol']}\t{row['price']}\t{row['volume']}\t{row['time']}" 
-                   for _, row in df.iterrows()]
+            # Return record count for file mode
+            return len(df_save)
         else:
             # Return formatted strings for stdout
             return [f"{row['symbol']}\t{row['price']}\t{row['volume']}\t{row['time']}" 
@@ -253,8 +252,10 @@ async def main_async(date, symbols, concurrency, output_file=None):
     results = await collect_minute_data(date, symbols, concurrency, output_file)
     
     # Print results to stdout
-    for line in results:
-        print(line)
+    # Print results to stdout if it's a list (not file mode)
+    if isinstance(results, list):
+        for line in results:
+            print(line)
     
     return 0
 

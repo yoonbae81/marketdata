@@ -166,7 +166,7 @@ async def collect_day_data(date, symbols, concurrency, output_file=None):
             out_path.parent.mkdir(parents=True, exist_ok=True)
             df.to_parquet(output_file, compression='zstd', index=False, engine='pyarrow')
             print(f'[INFO] Saved {len(df)} records to {output_file}', file=sys.stderr)
-            return []
+            return len(df)
         
         # Return data for non-file mode - optimized to avoid iterrows
         return [f"{d['symbol']}\t{d['open']}\t{d['high']}\t{d['low']}\t{d['close']}\t{d['volume']}" 
