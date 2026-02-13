@@ -37,7 +37,7 @@ def run(sr: ScriptReporter, args):
         asyncio.set_event_loop(loop)
         
     symbols = loop.run_until_complete(get_all_symbols())
-    sr.log(f"Fetched {len(symbols)} symbols")
+    print(f"Fetched {len(symbols)} symbols")
     
     year = date.split('-')[0]
     project_root = Path(__file__).resolve().parent.parent
@@ -45,12 +45,12 @@ def run(sr: ScriptReporter, args):
     sr.stage("FETCHING_KR_1D")
     output_1d = project_root / "data" / "KR-1d" / year / f"{date}.parquet"
     loop.run_until_complete(fetch_kr1d_data(date, symbols, concurrency, str(output_1d)))
-    sr.log(f"Daily data saved to {output_1d}")
+    print(f"Daily data saved to {output_1d}")
     
     sr.stage("FETCHING_KR_1M")
     output_1m = project_root / "data" / "KR-1m" / year / f"{date}.parquet"
     loop.run_until_complete(fetch_kr1m_data(date, symbols, concurrency, str(output_1m)))
-    sr.log(f"Minute data saved to {output_1m}")
+    print(f"Minute data saved to {output_1m}")
     
     return {"status": "completed", "date": date, "symbols_count": len(symbols)}
 
