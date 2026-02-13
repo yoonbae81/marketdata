@@ -10,7 +10,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to Remote Server
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Execute remote deployment script
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.HOST }}
@@ -18,9 +21,8 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
           script: |
-            # Navigate to the repository directory
-            cd ~/marketdata || exit 1
+            # Navigate to the project directory
+            cd ~/marketdata
             
-            echo "📥 Pulling latest changes..."
-            git pull origin master
-            
+            # Execute the standard deployment script
+            bash scripts/deploy.sh

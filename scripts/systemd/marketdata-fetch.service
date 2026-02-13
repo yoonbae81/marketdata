@@ -1,12 +1,18 @@
 [Unit]
 Description=MarketData Fetch Service
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=oneshot
 WorkingDirectory={{PROJECT_ROOT}}
-# Run the fetch script using bash
-ExecStart=/bin/bash {{PROJECT_ROOT}}/src/run.sh
+Environment="PATH={{PROJECT_ROOT}}/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+# Run the run script, which handles main.py execution
+ExecStart=/bin/bash {{PROJECT_ROOT}}/scripts/run.sh
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=marketdata-fetch
 
 [Install]
 WantedBy=default.target
